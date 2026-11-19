@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>AFM 表面形貌分析 · 在线</title>
-<meta name="description" content="在浏览器中直接解析 Asylum MFP-3D 的 .ibw 数据，输出粗糙度、晶粒尺寸、颗粒统计与 Word 报告，文件不上传。">
+<title>AFM 表面形貌与颗粒分析 · 在线</title>
+<meta name="description" content="在浏览器中直接解析 Asylum MFP-3D 的 .ibw 数据，输出粗糙度、颗粒统计与 Word 报告，文件不上传。">
 <style>
 :root{
   --bg:#faf8f5; --ink:#1c1917; --sub:#6b645c; --line:#e6e0d7; --card:#fff;
@@ -130,8 +130,8 @@ footer .dot{opacity:.5}
 <div class="wrap">
 
 <header>
-  <h1>AFM 表面形貌分析</h1>
-  <p class="lede">拖入 Asylum MFP-3D 的 <code>.ibw</code> 数据，浏览器本地完成解析、去倾斜、粗糙度与晶粒/颗粒统计，输出 2D／3D 图、汇总表和 Word 报告。<b>文件不会上传到任何服务器。</b></p>
+  <h1>AFM 表面形貌与颗粒分析</h1>
+  <p class="lede">拖入 Asylum MFP-3D 的 <code>.ibw</code> 数据，浏览器本地完成解析、去倾斜、粗糙度与颗粒识别，输出 2D／3D 图、颗粒标记图、汇总表和 Word 报告。<b>文件不会上传到任何服务器。</b></p>
 </header>
 
 <section>
@@ -162,20 +162,20 @@ footer .dot{opacity:.5}
     </div>
     <div>
       <h3>计算</h3>
-      <p>一阶最小二乘去倾斜 → Ra / Rq / Rmax / Rz / Ssk / Sku；自动判定「连续晶粒织构」或「平坦基底 + 孤立颗粒」，前者做分水岭晶粒统计，后者做颗粒统计。</p>
+      <p>一阶最小二乘去倾斜 → Ra / Rq / Rmax / Rz / Ssk / Sku；再做背景扣除与自适应阈值分割，识别孤立颗粒并统计数量、面密度、尺寸与高度。</p>
     </div>
     <div>
       <h3>输出</h3>
-      <p>Gwyddion 色标 + 色标条 + 1 µm scale bar 的 2D/3D 图，汇总表与 Word 报告，可打包成 ZIP 下载。</p>
+      <p>Gwyddion 色标 + 色标条 + 1 µm scale bar 的 2D/3D 图与颗粒标记图，粗糙度表、颗粒统计表、颗粒尺寸分布、Word 报告，可打包成 ZIP 下载。</p>
     </div>
   </div>
   <h2>口径说明</h2>
   <ul class="notes">
     <li>去面只做一阶平面拟合（去样品倾斜），不做逐行滤波，因此 Ra 包含真实长波起伏。</li>
-    <li>晶粒：高斯平滑 σ=1 px → 高度局部极大作种子 → 按高度升序的分水岭生长；面积 &lt; 12 px 或接触边缘者剔除，粒径为等效圆直径 2√(A/π)。</li>
-    <li>颗粒：15 px 尺度高斯高通 → 8σ 阈值（下限 3 nm）→ 面积 ≥ 6 px。</li>
-    <li>表面类型判据：Ra/Rmax &lt; 0.06，或（覆盖率 &gt; 0.2% 且颗粒均高 &gt; 3Ra）→ 平坦基底 + 孤立颗粒。属于经验阈值，建议结合原图复核。</li>
-    <li>浏览器端分水岭与桌面 Python 版在像素级上略有差异，粒径统计一般相差 1–3%。</li>
+    <li>颗粒识别：15 px（约 0.15 µm）高斯背景 → 相减得高通残差 → 残差 MAD 估计噪声 σ → 阈值 max(8σ, 3 nm) → 8 邻域连通域 → 面积 ≥ 6 px 计为颗粒。</li>
+    <li>尺寸为等效圆直径 2√(A/π)；高度为颗粒最高点相对全幅背景中位数的高度；覆盖率 = 颗粒像素占全幅比例。</li>
+    <li>阈值随各图噪声自适应：平滑表面可检出数 nm 级颗粒；粗糙表面 σ 大、阈值抬高，报 0 个表示未检出高于噪声的孤立凸起，不等于表面洁净。</li>
+    <li>本页不做晶粒分割与晶粒尺寸统计；如需晶粒/织构评价，请用配套的桌面版脚本。</li>
   </ul>
 </section>
 
@@ -20324,7 +20324,7 @@ var __async = (__this, __arguments, generator) => {
 /* ============================================================
  * core.js — .ibw 解析 + 数值分析（纯 JS，无依赖）
  * 与 Python 版口径保持一致：一阶去面 / Ra·Rq·Rmax·Rz /
- * 分水岭晶粒 / 高通颗粒检测 / 表面类型自动判定
+ * 高通背景扣除后的颗粒识别与统计
  * ============================================================ */
 
 /* ---------- Gwyddion 色标（33 个采样点） ---------- */
@@ -20550,104 +20550,7 @@ function gaussianBlur(src, nx, ny, sigma) {
   return out;
 }
 
-/* ---------- 局部极大（等价 peak_local_max + min_distance 抑制） ---------- */
-function peakLocalMax(zn, nx, ny, minDist, thr) {
-  const cand = [];
-  const w = minDist;
-  for (let y = 0; y < ny; y++) {
-    for (let x = 0; x < nx; x++) {
-      const v = zn[y * nx + x];
-      if (v < thr) continue;
-      let isMax = true;
-      for (let dy = -w; dy <= w && isMax; dy++) {
-        const yy = y + dy;
-        if (yy < 0 || yy >= ny) continue;
-        for (let dx = -w; dx <= w; dx++) {
-          const xx = x + dx;
-          if (xx < 0 || xx >= nx) continue;
-          if (dy === 0 && dx === 0) continue;
-          if (zn[yy * nx + xx] > v) { isMax = false; break; }
-        }
-      }
-      if (isMax) cand.push([v, x, y]);
-    }
-  }
-  cand.sort((a, b) => b[0] - a[0]);
-  const keep = [];
-  for (const [v, x, y] of cand) {
-    let ok = true;
-    for (const p of keep) {
-      const dx = p[1] - x, dy = p[2] - y;
-      if (dx * dx + dy * dy < minDist * minDist) { ok = false; break; }
-    }
-    if (ok) keep.push([v, x, y]);
-  }
-  return keep;
-}
-
-/* ---------- 分水岭（优先队列，从高处向谷底生长，与 skimage 一致） ---------- */
-function watershed(zn, nx, ny, seeds) {
-  const n = nx * ny;
-  const labels = new Int32Array(n);
-  const isSeed = new Uint8Array(n);
-  const hz = new Float32Array(n + 2);
-  const hi = new Int32Array(n + 2);
-  let hn = 0;
-
-  const swap = (a, b) => { const tz = hz[a], ti = hi[a]; hz[a] = hz[b]; hi[a] = hi[b]; hz[b] = tz; hi[b] = ti; };
-  const push = (z, idx) => {
-    let i = ++hn; hz[i] = z; hi[i] = idx;
-    while (i > 1) { const p = i >> 1; if (hz[p] <= hz[i]) break; swap(p, i); i = p; }
-  };
-  const pop = () => {
-    const top = hi[1];
-    hz[1] = hz[hn]; hi[1] = hi[hn]; hn--;
-    let i = 1;
-    for (;;) {
-      const l = i << 1, r = l + 1;
-      let m = i;
-      if (l <= hn && hz[l] < hz[m]) m = l;
-      if (r <= hn && hz[r] < hz[m]) m = r;
-      if (m === i) break;
-      swap(m, i); i = m;
-    }
-    return top;
-  };
-
-  for (let k = 0; k < seeds.length; k++) {
-    const idx = seeds[k][2] * nx + seeds[k][1];
-    if (labels[idx] !== 0) continue;
-    labels[idx] = k + 1;
-    isSeed[idx] = 1;
-    push(-zn[idx], idx);       // 负高度：高的先出，水从晶粒顶向谷底涨
-  }
-
-  const dxs = [1, -1, 0, 0, 1, 1, -1, -1];
-  const dys = [0, 0, 1, -1, 1, -1, 1, -1];
-
-  while (hn > 0) {
-    const p = pop();
-    let lp = labels[p];
-    if (lp < 0) continue;
-    const x = p % nx, y = (p / nx) | 0;
-    for (let k = 0; k < 8; k++) {
-      const xx = x + dxs[k], yy = y + dys[k];
-      if (xx < 0 || xx >= nx || yy < 0 || yy >= ny) continue;
-      const q = yy * nx + xx;
-      const lq = labels[q];
-      if (lq === 0) {
-        labels[q] = lp;
-        push(-zn[q], q);
-      }
-      // 已被其他流域占据：不覆盖，也不标边界（等价 watershed_line=False，
-      // 保证每个像素都有归属，区域面积不被边界吃掉）
-    }
-  }
-  for (let i = 0; i < n; i++) if (labels[i] < 0) labels[i] = 0;
-  return labels;
-}
-
-/* ---------- 连通域标注（颗粒用） ---------- */
+/* ---------- 连通域标注 ---------- */
 function labelMask(mask, nx, ny) {
   const lbl = new Int32Array(nx * ny);
   const stack = new Int32Array(nx * ny);
@@ -20673,12 +20576,10 @@ function labelMask(mask, nx, ny) {
   return { lbl, count: cur };
 }
 
-/* ---------- 区域属性（面积、二阶矩、bbox） ---------- */
+/* ---------- 区域属性（面积、质心、bbox） ---------- */
 function regionProps(lbl, count, nx, ny, minArea) {
   const cnt = new Float64Array(count + 1);
   const sx = new Float64Array(count + 1), sy = new Float64Array(count + 1);
-  const sxx = new Float64Array(count + 1), syy = new Float64Array(count + 1);
-  const sxy = new Float64Array(count + 1);
   const r0 = new Int32Array(count + 1).fill(1e9), r1 = new Int32Array(count + 1).fill(-1);
   const c0 = new Int32Array(count + 1).fill(1e9), c1 = new Int32Array(count + 1).fill(-1);
   for (let y = 0; y < ny; y++) {
@@ -20686,7 +20587,6 @@ function regionProps(lbl, count, nx, ny, minArea) {
       const l = lbl[y * nx + x];
       if (!l) continue;
       cnt[l]++; sx[l] += x; sy[l] += y;
-      sxx[l] += x * x; syy[l] += y * y; sxy[l] += x * y;
       if (y < r0[l]) r0[l] = y; if (y > r1[l]) r1[l] = y;
       if (x < c0[l]) c0[l] = x; if (x > c1[l]) c1[l] = x;
     }
@@ -20694,48 +20594,28 @@ function regionProps(lbl, count, nx, ny, minArea) {
   const res = [];
   for (let l = 1; l <= count; l++) {
     if (cnt[l] < minArea) continue;
-    const a = cnt[l];
-    const mx = sx[l] / a, my = sy[l] / a;
-    const vxx = sxx[l] / a - mx * mx, vyy = syy[l] / a - my * my, vxy = sxy[l] / a - mx * my;
-    const tr = vxx + vyy, dt = vxx * vyy - vxy * vxy;
-    const disc = Math.sqrt(Math.max(0, tr * tr / 4 - dt));
-    const l1 = tr / 2 + disc, l2 = Math.max(1e-9, tr / 2 - disc);
     res.push({
-      label: l, area: a,
-      cx: mx, cy: my,
-      r0: r0[l], r1: r1[l], c0: c0[l], c1: c1[l],
-      // 与 skimage 一致的轴长换算：4*sqrt(特征值)
-      major: 4 * Math.sqrt(l1), minor: 4 * Math.sqrt(l2)
+      label: l, area: cnt[l],
+      cx: sx[l] / cnt[l], cy: sy[l] / cnt[l],
+      r0: r0[l], r1: r1[l], c0: c0[l], c1: c1[l]
     });
   }
   return res;
 }
 
-/* ---------- 晶粒分析 ---------- */
-function grainStats(zm, nx, ny, pxUm) {
-  const zs = gaussianBlur(zm, nx, ny, 1.0);
-  let mn = Infinity, mx = -Infinity;
-  for (let i = 0; i < zs.length; i++) { if (zs[i] < mn) mn = zs[i]; if (zs[i] > mx) mx = zs[i]; }
-  const span = (mx - mn) || 1;
-  const zn = new Float32Array(zs.length);
-  for (let i = 0; i < zs.length; i++) zn[i] = (zs[i] - mn) / span;
+/* ---------- 颗粒识别 ----------
+ * 口径：背景尺度 15 px 高斯高通 → 由 MAD 估计噪声 σ → 阈值 max(8σ, 3 nm)
+ *      → 8 邻域连通域 → 面积 ≥ 6 px 计入。
+ * 15 px ≈ 5 µm/512 × 15 = 0.15 µm，可把晶粒级起伏当背景滤掉，
+ * 只保留尺寸明显更大、且高于背景的孤立凸起。
+ */
+function detectParticles(zm, nx, ny, pxUm, opt = {}) {
+  const bgPx = opt.bgPx || 15;
+  const kSigma = opt.kSigma || 8;
+  const minHnm = opt.minHnm == null ? 3 : opt.minHnm;
+  const minPx = opt.minPx || 6;
 
-  // 99 分位（Float32Array.sort 才是数值排序）
-  const sample = Float32Array.from(zn).sort();
-  const p99 = sample[Math.floor(sample.length * 0.99)];
-  const thrN = 0.45 * p99;   // zn 已归一化到 0..1，等价于 zn.min()+0.45*(p99-zn.min())
-
-  const seeds = peakLocalMax(zn, nx, ny, 3, thrN);
-  const labels = watershed(zn, nx, ny, seeds, 0);
-  const props = regionProps(labels, seeds.length, nx, ny, 12);
-
-  const good = props.filter((p) => !(p.r0 === 0 || p.c0 === 0 || p.r1 === ny - 1 || p.c1 === nx - 1));
-  return { labels, seeds, props: good, all: props, pxUm };
-}
-
-/* ---------- 颗粒检测 ---------- */
-function detectParticles(zm, nx, ny, pxUm) {
-  const bg = gaussianBlur(zm, nx, ny, 15);
+  const bg = gaussianBlur(zm, nx, ny, bgPx);
   const hp = new Float32Array(zm.length);
   for (let i = 0; i < zm.length; i++) hp[i] = zm[i] - bg[i];
 
@@ -20747,22 +20627,23 @@ function detectParticles(zm, nx, ny, pxUm) {
   const mad = dvs[Math.floor(dvs.length / 2)];
   const sig = 1.4826 * mad;
 
+  const thr = Math.max(kSigma * sig, minHnm * 1e-9);
   const base = sorted[Math.floor(sorted.length / 2)];
-  const thr = Math.max(8 * sig, 3e-9);
   const mask = new Uint8Array(hp.length);
   let cnt = 0;
   for (let i = 0; i < hp.length; i++) if (hp[i] > thr) { mask[i] = 1; cnt++; }
 
   const { lbl, count } = labelMask(mask, nx, ny);
-  const props = regionProps(lbl, count, nx, ny, 6);
+  const props = regionProps(lbl, count, nx, ny, minPx);
 
   const recs = props.map((p) => {
-    let hmax = -Infinity;
+    let hmax = -Infinity, hsum = 0, np = 0;
     for (let y = p.r0; y <= p.r1; y++) {
       for (let x = p.c0; x <= p.c1; x++) {
         if (lbl[y * nx + x] === p.label) {
           const v = zm[y * nx + x];
           if (v > hmax) hmax = v;
+          hsum += v; np++;
         }
       }
     }
@@ -20770,20 +20651,29 @@ function detectParticles(zm, nx, ny, pxUm) {
       dEq: 2 * Math.sqrt(p.area / Math.PI) * pxUm * 1000,
       areaUm2: p.area * pxUm * pxUm,
       hNm: (hmax - base) * 1e9,
-      cx: p.cx, cy: p.cy, area: p.area
+      hMeanNm: (hsum / np - base) * 1e9,
+      cx: p.cx, cy: p.cy,
+      cxUm: p.cx * pxUm, cyUm: p.cy * pxUm,
+      area: p.area
     };
   });
-  return { recs, cover: cnt / hp.length, sigmaNm: sig * 1e9 };
-}
 
-/* ---------- 表面类型判定 ---------- */
-function classify(ra, rmax, precs, cover) {
-  const ratio = ra / (rmax + 1e-12);
-  const meanH = precs.length ? precs.reduce((a, b) => a + b.hNm, 0) / precs.length : 0;
-  if (ratio < 0.06) return { grain: false, why: `Ra/Rmax=${ratio.toFixed(3)}` };
-  if (cover > 0.002 && meanH > 3 * ra && precs.length >= 5)
-    return { grain: false, why: `颗粒覆盖 ${(cover * 100).toFixed(2)}%，均高 ${meanH.toFixed(0)} nm` };
-  return { grain: true, why: `Ra/Rmax=${ratio.toFixed(3)}` };
+  // 面密度、覆盖率、尺寸分布
+  const area = nx * pxUm * ny * pxUm;
+  const ds = recs.map((r) => r.dEq).sort((a, b) => a - b);
+  const hs = recs.map((r) => r.hNm).sort((a, b) => a - b);
+  const q = (arr, t) => (arr.length ? arr[Math.min(arr.length - 1, Math.floor(arr.length * t))] : 0);
+  const mean = (arr) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0);
+
+  const stat = {
+    n: recs.length,
+    density: recs.length / (area || 1),
+    cover: cnt / hp.length,
+    dMean: mean(ds), dMed: q(ds, 0.5), dP90: q(ds, 0.9), dMax: ds.length ? ds[ds.length - 1] : 0,
+    hMean: mean(hs), hMed: q(hs, 0.5), hMax: hs.length ? hs[hs.length - 1] : 0,
+    sigmaNm: sig * 1e9, thrNm: thr * 1e9, baseNm: base * 1e9
+  };
+  return { recs, stat, labels: lbl, mask };
 }
 
 /* ---------- 单个文件全流程 ---------- */
@@ -20792,32 +20682,22 @@ function analyzeBuffer(buf, fileName, onStep) {
   if (onStep) onStep('已解析，去倾斜…');
   const z0 = planeLevel(d.height, d.nx, d.ny);
   const rs = roughStats(z0);
-  if (onStep) onStep('检测颗粒…');
+  if (onStep) onStep('识别颗粒…');
   const p = detectParticles(z0, d.nx, d.ny, d.pxUm);
-  const cls = classify(rs.Ra, rs.Rmax, p.recs, p.cover);
 
-  let grain = null, labels = null;
-  if (cls.grain) {
-    if (onStep) onStep('分水岭分割晶粒…');
-    const g = grainStats(z0, d.nx, d.ny, d.pxUm);
-    labels = g.labels;
-    grain = g.props.map((q) => ({
-      dEq: 2 * Math.sqrt(q.area / Math.PI) * d.pxUm * 1000,
-      major: q.major * d.pxUm * 1000
-    }));
-  }
   return {
     name: fileName.replace(/\.ibw$/i, '').replace(/_\d{4}$/, ''),
     nx: d.nx, ny: d.ny, scanUm: d.scanUm, pxUm: d.pxUm,
-    z: z0, rs, particles: p.recs, cover: p.cover, sigma: p.sigmaNm,
-    grain: cls.grain, grainWhy: cls.why, grainProps: grain, labels,
+    z: z0, rs,
+    particles: p.recs, pstat: p.stat,
+    cover: p.stat.cover, sigma: p.stat.sigmaNm, thr: p.stat.thrNm,
     meta: d.meta
   };
 }
 
 
 /* ============================================================
- * draw.js — Canvas 绘图：2D 高度图 / 3D 形貌 / 晶粒 / 总览 / 统计图
+ * draw.js — Canvas 绘图：2D 高度图 / 3D 形貌 / 颗粒标记 / 总览 / 统计图
  * ============================================================ */
 
 const FONT = '12px "Microsoft YaHei","PingFang SC","Hiragino Sans GB",sans-serif';
@@ -20904,29 +20784,22 @@ function drawScalebar(ctx, x, y, lenPx, total, label) {
   ctx.restore();
 }
 
-/* ---------- z → ImageData ---------- */
-function zToImage(z, nx, ny, lo, hi, seg) {
+/* ---------- z → ImageData ----------
+ * 数据第 0 行画在底部（等价 imshow origin='lower'），
+ * 这样 y 轴刻度、颗粒像素坐标与图面三者一致。
+ */
+function zToImage(z, nx, ny, lo, hi) {
   const img = new ImageData(nx, ny);
   const d = img.data;
   const span = (hi - lo) || 1;
-  for (let i = 0; i < nx * ny; i++) {
-    const t = (z[i] - lo) / span;
-    const c = cmap(t);
-    const o = i * 4;
-    d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2]; d[o + 3] = 255;
-  }
-  if (seg) {  // 晶粒边界
-    for (let y = 0; y < ny; y++) {
-      for (let x = 0; x < nx; x++) {
-        const i = y * nx + x;
-        const l = seg[i];
-        const r = x + 1 < nx ? seg[i + 1] : l;
-        const b = y + 1 < ny ? seg[i + nx] : l;
-        if (l !== r || l !== b) {
-          const o = i * 4;
-          d[o] = 0; d[o + 1] = 217; d[o + 2] = 242; d[o + 3] = 255;
-        }
-      }
+  for (let y = 0; y < ny; y++) {
+    const dst = (ny - 1 - y) * nx;
+    const src = y * nx;
+    for (let x = 0; x < nx; x++) {
+      const t = (z[src + x] - lo) / span;
+      const c = cmap(t);
+      const o = (dst + x) * 4;
+      d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2]; d[o + 3] = 255;
     }
   }
   return img;
@@ -20945,7 +20818,6 @@ function drawImageData(ctx, img, x, y, w, h) {
 function draw2D(canvas, item, opts = {}) {
   const W = opts.W || 620, H = opts.H || 660;
   const ctx = setup(canvas, W, H);
-  const seg = opts.seg || null;
 
   const left = 66, top = 46, right = 96, bottom = 62;
   const side = Math.min(W - left - right, H - top - bottom);
@@ -20956,7 +20828,7 @@ function draw2D(canvas, item, opts = {}) {
   for (let i = 0; i < z.length; i++) { if (z[i] < lo) lo = z[i]; if (z[i] > hi) hi = z[i]; }
   const lo_nm = lo * 1e9, hi_nm = hi * 1e9;
 
-  const img = zToImage(z, item.nx, item.ny, lo, hi, seg);
+  const img = zToImage(z, item.nx, item.ny, lo, hi);
   drawImageData(ctx, img, px, py, pw, ph);
 
   // 边框
@@ -20992,6 +20864,9 @@ function draw2D(canvas, item, opts = {}) {
   const barPx = pw / ext;
   drawScalebar(ctx, px + 14, py + ph - 16, barPx, ext, '1 µm');
 
+  // 叠加层（颗粒标记等）
+  if (opts.overlay) opts.overlay(ctx, px, py, pw, ph);
+
   // 标题
   ctx.fillStyle = '#111'; ctx.font = FONT_T; ctx.textAlign = 'center';
   ctx.fillText(opts.title || item.name, W / 2 - 10, 20);
@@ -21002,19 +20877,62 @@ function draw2D(canvas, item, opts = {}) {
   return canvas;
 }
 
+/* ---------- 颗粒标记图 ---------- */
+function drawParticles(canvas, item, opts = {}) {
+  const P = item.particles || [];
+  const st = item.pstat || { density: 0, dMean: 0, hMean: 0, thrNm: 0, sigmaNm: 0 };
+  const W = opts.W || 620, H = opts.H || 566;
+  const sub = P.length
+    ? `面密度 ${st.density.toFixed(2)} 个/µm² · 均径 ${st.dMean.toFixed(0)} nm · 均高 ${st.hMean.toFixed(1)} nm`
+    : `未检出孤立颗粒（阈值 ${st.thrNm.toFixed(1)} nm · 噪声 σ ${st.sigmaNm.toFixed(2)} nm）`;
+
+  return draw2D(canvas, item, {
+    W, H,
+    title: `${item.name}   颗粒 n=${P.length}`,
+    subtitle: sub,
+    overlay(ctx, px, py, pw, ph) {
+      if (!P.length) return;
+      const pxPerUm = pw / item.scanUm;
+      ctx.save();
+      ctx.lineWidth = 1.3;
+      for (const p of P) {
+        const x = px + p.cxUm * pxPerUm;
+        const y = py + (item.scanUm - p.cyUm) * pxPerUm;
+        if (x < px - 2 || x > px + pw + 2 || y < py - 2 || y > py + ph + 2) continue;
+        const r = Math.max(2.2, (p.dEq / 2000) * pxPerUm);
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(0,0,0,.55)';
+        ctx.lineWidth = 2.6;
+        ctx.stroke();
+        ctx.strokeStyle = '#00e0ff';
+        ctx.lineWidth = 1.3;
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  });
+}
+
 /* ---------- 3D 形貌 ---------- */
 function draw3D(canvas, item, opts = {}) {
   const W = opts.W || 660, H = opts.H || 560;
   const ctx = setup(canvas, W, H);
 
-  const n = Math.min(176, item.nx);
+  const n = Math.min(150, item.nx);
   const step = item.nx / n;
   const grid = new Float32Array(n * n);
+  // 块平均降采样：点取样会把高频细节变成尖刺
   for (let j = 0; j < n; j++) {
+    const y0 = Math.floor(j * step), y1 = Math.max(y0 + 1, Math.floor((j + 1) * step));
     for (let i = 0; i < n; i++) {
-      const y = Math.min(item.ny - 1, Math.floor(j * step));
-      const x = Math.min(item.nx - 1, Math.floor(i * step));
-      grid[j * n + i] = item.z[y * item.nx + x];
+      const x0 = Math.floor(i * step), x1 = Math.max(x0 + 1, Math.floor((i + 1) * step));
+      let acc = 0, cnt = 0;
+      for (let y = y0; y < Math.min(y1, item.ny); y++) {
+        const row = y * item.nx;
+        for (let x = x0; x < Math.min(x1, item.nx); x++) { acc += item.z[row + x]; cnt++; }
+      }
+      grid[j * n + i] = cnt ? acc / cnt : 0;
     }
   }
   // 两次 3×3 平滑，让面看起来圆润
@@ -21033,7 +20951,7 @@ function draw3D(canvas, item, opts = {}) {
       sm[j * n + i] = s / c;
     }
   }
-  for (let pass = 0; pass < 3; pass++) {
+  for (let pass = 0; pass < 6; pass++) {
     const tmp = new Float32Array(n * n);
     for (let j = 0; j < n; j++) {
       for (let i = 0; i < n; i++) {
@@ -21056,7 +20974,7 @@ function draw3D(canvas, item, opts = {}) {
 
   const ext = item.scanUm;
   const az = -125 * Math.PI / 180, el = 42 * Math.PI / 180;
-  const zex = 0.42;                    // 纵向夸张
+  const zex = 0.30;                    // 纵向夸张
   const ca = Math.cos(az), sa = Math.sin(az), ce = Math.cos(el), se = Math.sin(el);
 
   const P = new Float32Array(n * n * 3);
@@ -21097,7 +21015,7 @@ function draw3D(canvas, item, opts = {}) {
       const nxv = -gx / span, nyv = -gy / span, nzv = 1;
       const nl = Math.hypot(nxv, nyv, nzv);
       let sh = (nxv * lx + nyv * ly + nzv * lz) / nl;
-      sh = 0.62 + 0.38 * Math.max(0, sh);
+      sh = 0.72 + 0.28 * Math.max(0, sh);
       const c = cmap((dz - mn) / span);
       quads.push({
         d: (P[(j * n + i) * 3 + 2] + P[((j + 1) * n + i + 1) * 3 + 2]) / 2,
@@ -21177,17 +21095,45 @@ function drawHist(canvas, values, title, opts = {}) {
   ctx.strokeStyle = '#666'; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(left, top); ctx.lineTo(left, top + ph); ctx.lineTo(left + pw, top + ph); ctx.stroke();
   ctx.fillStyle = '#333'; ctx.font = FONT_S; ctx.textAlign = 'center';
-  for (let i = 0; i <= 4; i++) {
-    const t = i / 4, xx = left + t * pw;
+  const nt = 3;
+  for (let i = 0; i <= nt; i++) {
+    const t = i / nt, xx = left + t * pw;
     ctx.fillText(fmt(mn + (mx - mn) * t), xx, top + ph + 12);
   }
   ctx.textAlign = 'center';
-  ctx.fillText('等效圆直径 (nm)', left + pw / 2, top + ph + 26);
+  ctx.fillText(opts.xlabel || '等效圆直径 (nm)', left + pw / 2, top + ph + 26);
   ctx.textAlign = 'left';
   ctx.fillText('计数', 2, top + 6);
   ctx.textAlign = 'center';
   ctx.fillStyle = '#111'; ctx.font = FONT_S;
   ctx.fillText(title, W / 2, 12);
+  return canvas;
+}
+
+/* ---------- 统计图网格（每样品一格） ---------- */
+function drawHistGrid(canvas, entries, opts = {}) {
+  const cols = Math.min(opts.cols || 3, Math.max(1, entries.length));
+  const rows = Math.ceil(entries.length / cols);
+  const cw = 330, ch = 224;
+  const W = cols * cw + 24, H = rows * ch + 62;
+  const ctx = setup(canvas, W, H);
+  ctx.fillStyle = '#faf8f5';
+  ctx.fillRect(0, 0, W, H);
+
+  entries.forEach((e, k) => {
+    const x = 12 + (k % cols) * cw;
+    const y = 44 + Math.floor(k / cols) * ch;
+    const off = document.createElement('canvas');
+    drawHist(off, e.values, e.name, {
+      W: cw - 12, H: ch - 10, xlabel: opts.xlabel || '等效圆直径 (nm)'
+    });
+    ctx.drawImage(off, x, y, cw - 12, ch - 10);
+    ctx.strokeStyle = '#e6e0d7'; ctx.lineWidth = 1;
+    ctx.strokeRect(x + 0.5, y + 0.5, cw - 13, ch - 11);
+  });
+
+  ctx.fillStyle = '#111'; ctx.font = FONT_T; ctx.textAlign = 'center';
+  ctx.fillText(opts.title || '颗粒尺寸分布', W / 2, 22);
   return canvas;
 }
 
@@ -21251,7 +21197,7 @@ function drawOverview(canvas, items, opts = {}) {
     const side = cellW - 92;
     let lo = Infinity, hi = -Infinity;
     for (let i = 0; i < it.z.length; i++) { if (it.z[i] < lo) lo = it.z[i]; if (it.z[i] > hi) hi = it.z[i]; }
-    const img = zToImage(it.z, it.nx, it.ny, lo, hi, null);
+    const img = zToImage(it.z, it.nx, it.ny, lo, hi);
     drawImageData(ctx, img, cx + 4, cy + 26, side, side);
 
     ctx.strokeStyle = '#888'; ctx.lineWidth = 0.5;
@@ -21264,7 +21210,7 @@ function drawOverview(canvas, items, opts = {}) {
 
     // Ra 左上 / scalebar 右下
     ctx.font = FONT_S; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-    const txt = `Ra ${it.rs.Ra.toFixed(2)} nm`;
+    const txt = `Ra ${it.rs.Ra.toFixed(2)} nm · 颗粒 ${it.particles ? it.particles.length : 0}`;
     ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.7)';
     ctx.strokeText(txt, cx + 10, cy + 32);
     ctx.fillStyle = '#fff';
@@ -21322,11 +21268,46 @@ function toCSV(headers, rows) {
   return '\uFEFF' + lines.join('\r\n');
 }
 
+/* ---------- CSV ---------- */
+function summaryCSV(items) {
+  const head = ['样品', '扫描范围 (µm)', 'Ra (nm)', 'Rq (nm)', 'Rmax (nm)', 'Rz (nm)',
+    'Ssk', 'Sku', '颗粒数', '面密度 (个/µm²)', '均径 (nm)', '中位径 (nm)', '最大径 (nm)',
+    '均高 (nm)', '最大高 (nm)', '覆盖率 (%)', '检测阈值 (nm)', '噪声 σ (nm)'];
+  const rows = items.map((i) => {
+    const s = i.pstat;
+    const f = (v, d) => (s.n ? v.toFixed(d) : '');
+    return [
+      i.name, i.scanUm,
+      i.rs.Ra.toFixed(3), i.rs.Rq.toFixed(3), i.rs.Rmax.toFixed(2), i.rs.Rz.toFixed(2),
+      i.rs.Ssk.toFixed(2), i.rs.Sku.toFixed(2),
+      s.n, f(s.density, 3), f(s.dMean, 1), f(s.dMed, 1), f(s.dMax, 1),
+      f(s.hMean, 2), f(s.hMax, 2), (s.cover * 100).toFixed(3),
+      s.thrNm.toFixed(2), s.sigmaNm.toFixed(3)
+    ];
+  });
+  return toCSV(head, rows);
+}
+
+function particleCSV(items) {
+  const head = ['样品', '编号', '等效直径 (nm)', '高度 (nm)', '面积 (µm²)',
+    'x (µm)', 'y (µm)', 'x 像素', 'y 像素'];
+  const rows = [];
+  for (const i of items) {
+    i.particles.forEach((p, k) => {
+      rows.push([
+        i.name, k + 1, p.dEq.toFixed(1), p.hNm.toFixed(2), p.areaUm2.toFixed(5),
+        p.cxUm.toFixed(3), p.cyUm.toFixed(3), p.cx.toFixed(1), p.cy.toFixed(1)
+      ]);
+    });
+  }
+  return toCSV(head, rows);
+}
+
 /* ---------- Word ---------- */
 async function buildDocx(state) {
   const {
     Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType,
-    Table, TableRow, TableCell, WidthType, ImageRun, PageBreak, BorderStyle
+    Table, TableRow, TableCell, WidthType, ImageRun, PageBreak
   } = docx;
 
   const F = '微软雅黑';
@@ -21349,7 +21330,7 @@ async function buildDocx(state) {
   });
 
   const mkTable = (headers, rows, widths) => new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
+    width: { size: 9600, type: WidthType.DXA },
     rows: [
       new TableRow({
         tableHeader: true,
@@ -21361,112 +21342,115 @@ async function buildDocx(state) {
     ]
   });
 
+  const imgPara = async (blob, ratio, w) => {
+    const ab = await blobToArrayBuffer(blob);
+    return new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 60, after: 60 },
+      children: [new ImageRun({
+        type: 'png', data: new Uint8Array(ab),
+        transformation: { width: w, height: Math.round(w * (ratio || 1)) }
+      })]
+    });
+  };
+
+  const items = state.items;
+  const withP = items.filter((i) => i.particles.length);
+  const totalP = items.reduce((a, i) => a + i.particles.length, 0);
+  const totalArea = items.reduce((a, i) => a + i.scanUm * i.scanUm, 0) || 1;
+
   const children = [];
   children.push(new Paragraph({
     alignment: AlignmentType.CENTER,
     spacing: { after: 80 },
-    children: [new TextRun({ text: 'AFM 表面形貌分析报告', font: F, size: 40, bold: true })]
+    children: [new TextRun({ text: 'AFM 表面形貌与颗粒分析报告', font: F, size: 40, bold: true })]
   }));
-  children.push(P(`${state.rootLabel} · 共 ${state.items.length} 个测点 · 生成于 ${new Date().toLocaleString('zh-CN')}`,
+  children.push(P(`${state.rootLabel} · 共 ${items.length} 个测点 · 生成于 ${new Date().toLocaleString('zh-CN')}`,
     { center: true, size: 18, color: '666666' }));
 
   // 一、概览
-  children.push(new Paragraph({ text: '一、数据概览', heading: HeadingLevel.HEADING_1, spacing: { before: 240, after: 80 } }));
-  const metas = state.items.map((i) => i.meta);
-  const scans = [...new Set(state.items.map((i) => i.scanUm))].join(' / ');
-  const pts = [...new Set(state.items.map((i) => i.nx))].join(' / ');
+  children.push(new Paragraph({ text: '一、数据概览', heading: HeadingLevel.HEADING_1, keepNext: true, spacing: { before: 240, after: 80 } }));
+  const metas = items.map((i) => i.meta);
+  const scans = [...new Set(items.map((i) => i.scanUm))].join(' / ');
+  const pts = [...new Set(items.map((i) => i.nx))].join(' / ');
   const modes = [...new Set(metas.map((m) => m.ImagingMode).filter(Boolean))].join(' / ') || '—';
   const rates = [...new Set(metas.map((m) => m.ScanRate).filter(Boolean))].join(' / ') || '—';
   children.push(P(`扫描范围：${scans} µm ；像素：${pts} × ${pts} ；成像模式：${modes} ；扫描速率：${rates} Hz`, { size: 20 }));
-  children.push(P('高度通道为 float32 原始数据，已做一阶最小二乘去倾斜（仅去样品倾斜，不做逐行滤波），因此 Ra 包含真实长波起伏。色标为 Gwyddion 色标，全部图标注 1 µm scale bar。', { size: 18 }));
+  children.push(P('高度通道为 float32 原始数据，已做一阶最小二乘去倾斜（仅去样品倾斜，不做逐行滤波），因此 Ra 包含真实长波起伏。色标为 Gwyddion 色标，全部图标注 1 µm scale bar。颗粒识别基于背景扣除后的局部凸起，详见第八节。', { size: 18 }));
 
   // 二、主要结果
-  children.push(new Paragraph({ text: '二、主要结果', heading: HeadingLevel.HEADING_1, spacing: { before: 240, after: 80 } }));
-  const gi = state.items.filter((i) => i.grain);
-  const pi = state.items.filter((i) => !i.grain);
-  children.push(P(`本次共处理 ${state.items.length} 个测点，其中 ${gi.length} 个判为连续晶粒织构、${pi.length} 个判为平坦基底 + 孤立颗粒（由 Ra/Rmax 与颗粒覆盖率自动判定，建议结合原图人工复核）。`, { size: 20 }));
-  if (gi.length) {
-    const ra = gi.map((i) => i.rs.Ra), d = gi.map((i) => i.grainMean);
-    children.push(P(`晶粒织构测点：Ra ${Math.min(...ra).toFixed(2)}–${Math.max(...ra).toFixed(2)} nm，平均晶粒直径 ${Math.min(...d).toFixed(0)}–${Math.max(...d).toFixed(0)} nm（等效圆）。`, { size: 20 }));
+  children.push(new Paragraph({ text: '二、主要结果', heading: HeadingLevel.HEADING_1, keepNext: true, spacing: { before: 240, after: 80 } }));
+  const ra = items.map((i) => i.rs.Ra);
+  children.push(P(`本次共处理 ${items.length} 个测点，Ra 范围 ${Math.min(...ra).toFixed(2)}–${Math.max(...ra).toFixed(2)} nm。`, { size: 20 }));
+  if (withP.length) {
+    const dens = withP.map((i) => i.pstat.density);
+    const dmean = withP.map((i) => i.pstat.dMean);
+    children.push(P(`${withP.length} 个测点检出颗粒，合计 ${totalP} 个，平均面密度 ${(totalP / totalArea).toFixed(2)} 个/µm²；单点密度 ${Math.min(...dens).toFixed(2)}–${Math.max(...dens).toFixed(2)} 个/µm²，平均等效直径 ${Math.min(...dmean).toFixed(0)}–${Math.max(...dmean).toFixed(0)} nm。`, { size: 20 }));
+    const flat = withP.slice().sort((a, b) => a.pstat.density - b.pstat.density);
+    const worst = withP.slice().sort((a, b) => b.pstat.density - a.pstat.density)[0];
+    children.push(P(`密度最低：${flat[0].name}（${flat[0].pstat.density.toFixed(2)} 个/µm²）；密度最高：${worst.name}（${worst.pstat.density.toFixed(2)} 个/µm²，覆盖率 ${(worst.pstat.cover * 100).toFixed(2)}%），建议优先复核。`, { size: 20 }));
   }
-  if (pi.length) {
-    const ra = pi.map((i) => i.rs.Ra);
-    children.push(P(`平坦基底测点：Ra ${Math.min(...ra).toFixed(2)}–${Math.max(...ra).toFixed(2)} nm，Rmax 基本由孤立颗粒贡献，不宜作为薄膜本征粗糙度使用。`, { size: 20 }));
+  const none = items.filter((i) => !i.particles.length);
+  if (none.length) {
+    children.push(P(`其余 ${none.length} 个测点未检出高于噪声的孤立颗粒（${none.map((i) => i.name).join('、')}），图像以连续起伏为主。`, { size: 20 }));
   }
 
-  // 三、粗糙度表
-  children.push(new Paragraph({ text: '三、粗糙度汇总', heading: HeadingLevel.HEADING_1, spacing: { before: 240, after: 80 } }));
+  // 三、粗糙度
+  children.push(new Paragraph({ text: '三、粗糙度汇总', heading: HeadingLevel.HEADING_1, keepNext: true, spacing: { before: 240, after: 80 } }));
   children.push(mkTable(
-    ['样品', '表面类型', 'Ra (nm)', 'Rq (nm)', 'Rmax (nm)', 'Rz (nm)', 'Ssk', 'Sku'],
-    state.items.map((i) => [
-      i.name, i.grain ? '晶粒织构' : '平坦+颗粒',
-      i.rs.Ra.toFixed(2), i.rs.Rq.toFixed(2), i.rs.Rmax.toFixed(2), i.rs.Rz.toFixed(2),
-      i.rs.Ssk.toFixed(2), i.rs.Sku.toFixed(2)
+    ['样品', 'Ra (nm)', 'Rq (nm)', 'Rmax (nm)', 'Rz (nm)', 'Ssk', 'Sku'],
+    items.map((i) => [
+      i.name, i.rs.Ra.toFixed(2), i.rs.Rq.toFixed(2), i.rs.Rmax.toFixed(2),
+      i.rs.Rz.toFixed(2), i.rs.Ssk.toFixed(2), i.rs.Sku.toFixed(2)
     ]),
-    [18, 14, 12, 12, 12, 11, 10, 10]
+    [22, 13, 13, 14, 13, 12, 12]
   ));
-  children.push(P('Ra = 算术平均偏差；Rq = 均方根；Rmax = 峰谷差 P-V；Rz = 五点峰均值 + 五点谷深均值。单位 nm。', { size: 16, color: '555555' }));
+  children.push(P('Ra = 算术平均偏差；Rq = 均方根；Rmax = 峰谷差 P-V；Rz = 五点峰均值与五点谷深均值之差。单位 nm。', { size: 16, color: '555555' }));
 
-  // 四、晶粒
-  if (gi.length) {
-    children.push(new Paragraph({ text: '四、晶粒尺寸统计', heading: HeadingLevel.HEADING_1, spacing: { before: 240, after: 80 } }));
-    children.push(mkTable(
-      ['样品', '晶粒数', '平均 (nm)', '中位 (nm)', '标准差', 'CV', 'P90 (nm)', '密度 (个/µm²)'],
-      gi.map((i) => [
-        i.name, i.grainCount, i.grainMean.toFixed(1), i.grainMed.toFixed(1),
-        i.grainStd.toFixed(1), i.grainCV.toFixed(3), i.grainP90.toFixed(1),
-        (i.grainCount / (i.scanUm * i.scanUm)).toFixed(2)
-      ])
-    ));
-    children.push(P('等效圆直径 = 2√(A/π)；种子点为高度局部极大，边界沿分水岭线；接触图像边缘的晶粒不参与统计。', { size: 16, color: '555555' }));
-  }
+  // 四、颗粒统计
+  children.push(new Paragraph({ text: '四、颗粒统计', heading: HeadingLevel.HEADING_1, keepNext: true, spacing: { before: 240, after: 80 } }));
+  children.push(mkTable(
+    ['样品', '颗粒数', '密度\n(个/µm²)', '均径\n(nm)', '中位\n(nm)', '最大\n(nm)', '均高\n(nm)', '最大高\n(nm)', '覆盖率\n(%)'],
+    items.map((i) => {
+      const s = i.pstat;
+      const f = (v, d) => (s.n ? v.toFixed(d) : '—');
+      return [i.name, s.n, f(s.density, 2), f(s.dMean, 1), f(s.dMed, 1),
+        f(s.dMax, 1), f(s.hMean, 2), f(s.hMax, 2), (s.cover * 100).toFixed(2)];
+    }),
+    [17, 9, 11, 10, 10, 10, 10, 11, 11]
+  ));
+  children.push(P('等效圆直径 = 2√(A/π)，A 为颗粒在阈值掩膜上的像素面积；高度为颗粒最高点相对背景中位数的高度；覆盖率 = 所有颗粒像素占全幅像素的比例。', { size: 16, color: '555555' }));
 
-  // 五、颗粒
-  if (pi.length) {
-    children.push(new Paragraph({ text: '五、颗粒与缺陷统计', heading: HeadingLevel.HEADING_1, spacing: { before: 240, after: 80 } }));
-    children.push(mkTable(
-      ['样品', '颗粒数', '密度 (个/µm²)', '均径 (nm)', '最大 (nm)', '均高 (nm)', '覆盖率 (%)'],
-      pi.map((i) => [
-        i.name, i.particles.length, (i.particles.length / (i.scanUm * i.scanUm)).toFixed(2),
-        (i.particles.reduce((a, b) => a + b.dEq, 0) / (i.particles.length || 1)).toFixed(1),
-        Math.max(0, ...i.particles.map((p) => p.dEq)).toFixed(1),
-        (i.particles.reduce((a, b) => a + b.hNm, 0) / (i.particles.length || 1)).toFixed(1),
-        (i.cover * 100).toFixed(2)
-      ])
-    ));
-    children.push(P('背景尺度 15 px 高斯高通后按 8σ 阈值分割（绝对下限 3 nm，面积 ≥ 6 px）。', { size: 16, color: '555555' }));
+  // 五、尺寸分布
+  if (state.imgHist) {
+    children.push(new Paragraph({ text: '五、颗粒尺寸分布', heading: HeadingLevel.HEADING_1, keepNext: true, spacing: { before: 240, after: 80 } }));
+    children.push(await imgPara(state.imgHist, state.histRatio, 560));
+    children.push(P('红色竖线为各样品颗粒等效直径的均值。', { size: 16, color: '555555' }));
   }
 
   // 六、汇总图
-  children.push(new Paragraph({ text: '六、汇总图', heading: HeadingLevel.HEADING_1, spacing: { before: 240, after: 80 } }));
-  if (state.imgOverview) {
-    const b = await blobToArrayBuffer(state.imgOverview);
-    children.push(new Paragraph({
-      alignment: AlignmentType.CENTER,
-      children: [new ImageRun({ type: 'png', data: new Uint8Array(b), transformation: { width: 560, height: 560 * (state.overviewRatio || 1) } })]
-    }));
-  }
+  children.push(new Paragraph({ text: '六、汇总图', heading: HeadingLevel.HEADING_1, keepNext: true, spacing: { before: 240, after: 80 } }));
+  if (state.imgOverview) children.push(await imgPara(state.imgOverview, state.overviewRatio, 540));
+  if (state.imgBar) children.push(await imgPara(state.imgBar, 0.34, 540));
 
   // 七、逐样品
-  children.push(new Paragraph({ text: '七、逐样品图集', heading: HeadingLevel.HEADING_1, spacing: { before: 240, after: 80 } }));
-  for (const it of state.items) {
-    children.push(new Paragraph({ children: [new PageBreak()] }));
-    children.push(new Paragraph({ text: it.name, heading: HeadingLevel.HEADING_2, spacing: { after: 40 } }));
-    let line = `Ra ${it.rs.Ra.toFixed(2)} nm · Rq ${it.rs.Rq.toFixed(2)} nm · Rmax ${it.rs.Rmax.toFixed(2)} nm · Rz ${it.rs.Rz.toFixed(2)} nm ｜ ${it.grain ? '晶粒织构' : '平坦基底 + 孤立颗粒'}`;
-    if (it.grain) line += ` ｜ 晶粒 ${it.grainCount} 个，平均 ${it.grainMean.toFixed(0)} nm`;
-    else line += ` ｜ 颗粒 ${it.particles.length} 个，均高 ${(it.particles.reduce((a, b) => a + b.hNm, 0) / (it.particles.length || 1)).toFixed(1)} nm`;
+  children.push(new Paragraph({ children: [new PageBreak()] }));
+  children.push(new Paragraph({ text: '七、逐样品图集', heading: HeadingLevel.HEADING_1, keepNext: true, spacing: { before: 0, after: 80 } }));
+  for (let k = 0; k < items.length; k++) {
+    const it = items[k];
+    if (k) children.push(new Paragraph({ children: [new PageBreak()] }));
+    children.push(new Paragraph({ text: it.name, heading: HeadingLevel.HEADING_2, keepNext: true, spacing: { after: 40 } }));
+    const s = it.pstat;
+    let line = `Ra ${it.rs.Ra.toFixed(2)} nm · Rq ${it.rs.Rq.toFixed(2)} nm · Rmax ${it.rs.Rmax.toFixed(2)} nm · Rz ${it.rs.Rz.toFixed(2)} nm`;
+    line += s.n
+      ? ` ｜ 颗粒 ${s.n} 个，${s.density.toFixed(2)} 个/µm²，均径 ${s.dMean.toFixed(0)} nm，均高 ${s.hMean.toFixed(1)} nm`
+      : ` ｜ 未检出颗粒（阈值 ${s.thrNm.toFixed(1)} nm，噪声 σ ${s.sigmaNm.toFixed(2)} nm）`;
     children.push(P(line, { size: 18, color: '444444' }));
 
-    for (const key of ['img2d', 'img3d', 'imgGrain']) {
+    for (const [key, ratioKey, w] of [['img2d', 'img2dRatio', 320], ['img3d', 'img3dRatio', 318], ['imgPart', 'imgPartRatio', 310]]) {
       const blob = it[key];
       if (!blob) continue;
-      const ab = await blobToArrayBuffer(blob);
-      const w = 400, h = Math.round(400 * (it[key + 'Ratio'] || 1.06));
-      children.push(new Paragraph({
-        alignment: AlignmentType.CENTER,
-        spacing: { before: 60, after: 60 },
-        children: [new ImageRun({ type: 'png', data: new Uint8Array(ab), transformation: { width: w, height: h } })]
-      }));
+      children.push(await imgPara(blob, it[ratioKey], w));
     }
   }
 
@@ -21476,11 +21460,11 @@ async function buildDocx(state) {
   const bullets = [
     '数据解析：.ibw 为 Asylum MFP-3D 的 ARDF v2 容器，结构为 384 B 头 + N 通道 × W × H float32 + 参数文本 + 128×128 预览图 + 尾部索引；仅使用 Height 通道。',
     '去面：一阶最小二乘平面拟合后相减，只去除样品倾斜。',
-    '粗糙度：Ra/Rq 按全幅逐点计算；Rmax 为峰谷差；Rz 为五点法。',
-    '晶粒：高斯平滑 σ=1 px → 高度局部极大作种子 → 按高度升序的分水岭生长；面积 < 12 px 或接触边缘者剔除。',
-    '颗粒：背景尺度 15 px 高斯高通 → 8σ 阈值（下限 3 nm）→ 面积 ≥ 6 px。',
-    '表面类型判定：Ra/Rmax < 0.06，或（覆盖率 > 0.2% 且颗粒均高 > 3Ra）判为「平坦基底 + 孤立颗粒」，此时不输出晶粒统计。',
-    '说明：本报告由浏览器端脚本生成，分水岭实现与桌面版在像素级上略有差异，粒径统计可能存在 1–3% 的偏差。'
+    '粗糙度：Ra/Rq 按全幅逐点计算；Rmax 为峰谷差；Rz 为五点法；Ssk/Sku 为偏度与峰度。',
+    '颗粒识别：15 px（约 0.15 µm）高斯背景 → 原图相减得高通残差 → 由残差 MAD 估计噪声 σ（σ=1.4826·MAD）→ 阈值 max(8σ, 3 nm) → 8 邻域连通域 → 面积 ≥ 6 px 计为颗粒。',
+    '颗粒尺寸：等效圆直径 2√(A/π)；高度为颗粒内最高点相对全幅背景中位数的高度。',
+    '阈值自适应：平滑表面 σ 小，可检出数 nm 级颗粒；粗糙表面 σ 大，阈值随之抬高。报告中「0 个」表示未检出高于噪声的孤立凸起，不等于表面洁净，建议结合 2D 图或降低阈值复核。',
+    '说明：本报告由浏览器端脚本生成，与桌面版（Python）在浮点累加顺序上略有差异，统计值一般在 1% 以内一致。'
   ];
   for (const b of bullets) {
     children.push(new Paragraph({
@@ -21505,24 +21489,21 @@ async function buildZip(state) {
   const zip = new JSZip();
   const root = zip.folder('AFM分析结果');
   const figs = root.folder('figs');
-  const d2 = figs.folder('01_2D'), d3 = figs.folder('02_3D'), dg = figs.folder('03_晶粒');
+  const d2 = figs.folder('01_2D'), d3 = figs.folder('02_3D'), dp = figs.folder('03_颗粒');
 
   for (const it of state.items) {
     if (it.img2d) d2.file(`${it.name}_2D.png`, it.img2d);
     if (it.img3d) d3.file(`${it.name}_3D.png`, it.img3d);
-    if (it.imgGrain) dg.file(`${it.name}_晶粒.png`, it.imgGrain);
+    if (it.imgPart) dp.file(`${it.name}_颗粒.png`, it.imgPart);
   }
-  if (state.imgOverview) root.folder('汇总图').file('总览_2D.png', state.imgOverview);
-  if (state.imgBar) root.folder('汇总图').file('对比_Ra_Rq.png', state.imgBar);
+  const sum = root.folder('汇总图');
+  if (state.imgOverview) sum.file('总览_2D.png', state.imgOverview);
+  if (state.imgBar) sum.file('对比_Ra_Rq.png', state.imgBar);
+  if (state.imgHist) sum.file('颗粒尺寸分布.png', state.imgHist);
 
-  const head = ['样品', '表面类型', '扫描范围 (µm)', 'Ra (nm)', 'Rq (nm)', 'Rmax (nm)', 'Rz (nm)', 'Ssk', 'Sku', '晶粒数', '平均晶粒 (nm)', '颗粒数'];
-  const rows = state.items.map((i) => [
-    i.name, i.grain ? '晶粒织构' : '平坦+颗粒', i.scanUm,
-    i.rs.Ra.toFixed(3), i.rs.Rq.toFixed(3), i.rs.Rmax.toFixed(2), i.rs.Rz.toFixed(2),
-    i.rs.Ssk.toFixed(2), i.rs.Sku.toFixed(2),
-    i.grain ? i.grainCount : '', i.grain ? i.grainMean.toFixed(1) : '', i.particles.length
-  ]);
-  root.folder('tables').file('汇总统计.csv', toCSV(head, rows));
+  const tab = root.folder('tables');
+  tab.file('汇总统计.csv', summaryCSV(state.items));
+  tab.file('颗粒明细.csv', particleCSV(state.items));
 
   if (state.docxBlob) root.file('AFM分析报告.docx', state.docxBlob);
   return await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
@@ -21534,8 +21515,8 @@ async function buildZip(state) {
  * ============================================================ */
 
 const state = {
-  items: [], imgOverview: null, imgBar: null, docxBlob: null,
-  overviewRatio: 1, rootLabel: '本地文件'
+  items: [], imgOverview: null, imgBar: null, imgHist: null, docxBlob: null,
+  overviewRatio: 1, histRatio: 1, rootLabel: '本地文件'
 };
 
 const $ = (s) => document.querySelector(s);
@@ -21581,6 +21562,8 @@ async function processFiles(files) {
   state.items = [];
   state.docxBlob = null;
   state.imgOverview = null;
+  state.imgBar = null;
+  state.imgHist = null;
   const failed = [];
   const used = new Set();
 
@@ -21595,17 +21578,6 @@ async function processFiles(files) {
       if (used.has(nm)) nm = `${nm}_${i + 1}`;
       used.add(nm);
       it.name = nm;
-
-      if (it.grain && it.grainProps && it.grainProps.length) {
-        const d = it.grainProps.map((g) => g.dEq);
-        const sorted = [...d].sort((a, b) => a - b);
-        it.grainCount = d.length;
-        it.grainMean = d.reduce((a, b) => a + b, 0) / d.length;
-        it.grainMed = sorted[Math.floor(sorted.length / 2)];
-        it.grainStd = Math.sqrt(d.reduce((a, b) => a + (b - it.grainMean) ** 2, 0) / d.length);
-        it.grainCV = it.grainStd / it.grainMean;
-        it.grainP90 = sorted[Math.floor(sorted.length * 0.9)];
-      }
       state.items.push(it);
     } catch (e) {
       console.warn(f.name, e);
@@ -21627,7 +21599,7 @@ async function processFiles(files) {
     await renderItemImages(state.items[i]);
   }
 
-  setProgress(0.96, '生成总览图…');
+  setProgress(0.96, '生成汇总图…');
   await tick();
   await renderSummaryImages();
 
@@ -21643,7 +21615,7 @@ function canvasToBlob(c) {
 async function renderItemImages(it) {
   const c1 = document.createElement('canvas');
   draw2D(c1, it, {
-    W: 620, H: 660, title: it.name,
+    W: 620, H: 566, title: it.name,
     subtitle: `Ra ${it.rs.Ra.toFixed(2)} nm · Rq ${it.rs.Rq.toFixed(2)} nm · Rmax ${it.rs.Rmax.toFixed(1)} nm`
   });
   it.img2d = await canvasToBlob(c1);
@@ -21654,16 +21626,10 @@ async function renderItemImages(it) {
   it.img3d = await canvasToBlob(c2);
   it.img3dRatio = c2.height / c2.width;
 
-  if (it.grain && it.labels) {
-    const c3 = document.createElement('canvas');
-    draw2D(c3, it, {
-      W: 620, H: 660, seg: it.labels,
-      title: `${it.name} 晶粒 n=${it.grainCount}`,
-      subtitle: `平均 ${it.grainMean.toFixed(0)} nm · 中位 ${it.grainMed.toFixed(0)} nm`
-    });
-    it.imgGrain = await canvasToBlob(c3);
-    it.imgGrainRatio = c3.height / c3.width;
-  }
+  const c3 = document.createElement('canvas');
+  drawParticles(c3, it, { W: 620, H: 566 });
+  it.imgPart = await canvasToBlob(c3);
+  it.imgPartRatio = c3.height / c3.width;
 }
 
 async function renderSummaryImages() {
@@ -21675,12 +21641,25 @@ async function renderSummaryImages() {
   const c2 = document.createElement('canvas');
   drawBar(c2, state.items, { W: 900, H: 320 });
   state.imgBar = await canvasToBlob(c2);
+
+  const withP = state.items.filter((i) => i.particles.length);
+  if (withP.length) {
+    const c3 = document.createElement('canvas');
+    drawHistGrid(c3, withP.map((i) => ({
+      name: `${i.name}（n=${i.particles.length}）`,
+      values: i.particles.map((p) => p.dEq)
+    })), { cols: Math.min(3, withP.length), title: '颗粒尺寸分布（等效圆直径）' });
+    state.imgHist = await canvasToBlob(c3);
+    state.histRatio = c3.height / c3.width;
+  }
 }
 
 /* ---------- 渲染页面 ---------- */
 function renderAll(failed) {
   const items = state.items;
-  const gi = items.filter((i) => i.grain);
+  const withP = items.filter((i) => i.particles.length);
+  const totalP = items.reduce((a, i) => a + i.particles.length, 0);
+  const totalArea = items.reduce((a, i) => a + i.scanUm * i.scanUm, 0) || 1;
 
   $('#empty').classList.add('hidden');
 
@@ -21691,63 +21670,90 @@ function renderAll(failed) {
   sum.innerHTML = `
     <div class="stats">
       <div class="stat"><b>${items.length}</b><span>测点</span></div>
-      <div class="stat"><b>${gi.length}</b><span>晶粒织构</span></div>
-      <div class="stat"><b>${items.length - gi.length}</b><span>平坦+颗粒</span></div>
+      <div class="stat"><b>${withP.length}</b><span>检出颗粒测点</span></div>
+      <div class="stat"><b>${totalP}</b><span>颗粒总数</span></div>
+      <div class="stat"><b>${(totalP / totalArea).toFixed(2)}</b><span>平均面密度 (个/µm²)</span></div>
       <div class="stat"><b>${scans}</b><span>扫描范围 (µm)</span></div>
       <div class="stat"><b>${items[0].nx}</b><span>像素</span></div>
     </div>
     ${failed.length ? `<p class="warn">${failed.length} 个文件解析失败：${failed.join('；')}</p>` : ''}`;
 
-  // 表格
-  const tw = $('#tableWrap');
-  tw.classList.remove('hidden');
-  const rows = items.map((i) => `
+  // 表 1：粗糙度
+  const rw = $('#tableWrap');
+  rw.classList.remove('hidden');
+  const rows1 = items.map((i) => `
     <tr>
       <td class="l">${i.name}</td>
-      <td class="t">${i.grain ? '晶粒织构' : '平坦+颗粒'}</td>
       <td>${i.rs.Ra.toFixed(2)}</td><td>${i.rs.Rq.toFixed(2)}</td>
       <td>${i.rs.Rmax.toFixed(1)}</td><td>${i.rs.Rz.toFixed(1)}</td>
       <td>${i.rs.Ssk.toFixed(2)}</td><td>${i.rs.Sku.toFixed(2)}</td>
-      <td>${i.grain ? i.grainCount : '—'}</td>
-      <td>${i.grain ? i.grainMean.toFixed(0) : '—'}</td>
-      <td>${i.particles.length}</td>
     </tr>`).join('');
-  tw.innerHTML = `
-    <h2>汇总表 <span class="hint">1 阶去面 · 单位 nm</span></h2>
+  const rows2 = items.map((i) => {
+    const s = i.pstat;
+    const dash = (v, d) => (i.particles.length ? v.toFixed(d) : '—');
+    return `
+    <tr>
+      <td class="l">${i.name}</td>
+      <td>${s.n}</td>
+      <td>${dash(s.density, 2)}</td>
+      <td>${dash(s.dMean, 0)}</td>
+      <td>${dash(s.dMed, 0)}</td>
+      <td>${dash(s.dMax, 0)}</td>
+      <td>${dash(s.hMean, 1)}</td>
+      <td>${dash(s.hMax, 1)}</td>
+      <td>${(s.cover * 100).toFixed(2)}</td>
+      <td>${s.thrNm.toFixed(1)}</td>
+    </tr>`;
+  }).join('');
+
+  rw.innerHTML = `
+    <h2>表 1 · 粗糙度 <span class="hint">1 阶去面 · 单位 nm</span></h2>
     <div class="tablewrap"><table class="data">
       <thead><tr>
-        <th class="l">样品</th><th>表面类型</th><th>Ra</th><th>Rq</th><th>Rmax</th><th>Rz</th>
-        <th>Ssk</th><th>Sku</th><th>晶粒数</th><th>平均粒径</th><th>颗粒数</th>
-      </tr></thead><tbody>${rows}</tbody>
+        <th class="l">样品</th><th>Ra</th><th>Rq</th><th>Rmax</th><th>Rz</th><th>Ssk</th><th>Sku</th>
+      </tr></thead><tbody>${rows1}</tbody>
     </table></div>
-    <p class="note">Ra = 算术平均偏差；Rq = 均方根；Rmax = 峰谷差；Rz = 五点法。晶粒为等效圆直径，已剔除边缘截断晶粒。</p>`;
+
+    <h2>表 2 · 颗粒识别 <span class="hint">高通背景扣除 · 尺寸为等效圆直径</span></h2>
+    <div class="tablewrap"><table class="data">
+      <thead><tr>
+        <th class="l">样品</th><th>颗粒数</th><th>面密度<br>(个/µm²)</th><th>均径<br>(nm)</th>
+        <th>中位<br>(nm)</th><th>最大<br>(nm)</th><th>均高<br>(nm)</th><th>最大高<br>(nm)</th>
+        <th>覆盖率<br>(%)</th><th>阈值<br>(nm)</th>
+      </tr></thead><tbody>${rows2}</tbody>
+    </table></div>
+    <p class="note">Ra = 算术平均偏差；Rq = 均方根；Rmax = 峰谷差；Rz = 五点法。颗粒口径见文末说明。</p>`;
 
   // 汇总图
   const ov = $('#overview');
   ov.classList.remove('hidden');
-  ov.innerHTML = `<h2>汇总图</h2>
-    <div class="figs">
-      <figure><img src="${URL.createObjectURL(state.imgOverview)}" alt="overview"><figcaption>总览（Gwyddion 色标，每格色标独立，scale bar = 1 µm）</figcaption></figure>
-      <figure><img src="${URL.createObjectURL(state.imgBar)}" alt="bar"><figcaption>各样品 Ra / Rq 对比</figcaption></figure>
-    </div>`;
+  const figs = [
+    `<figure><img src="${URL.createObjectURL(state.imgOverview)}" alt="overview"><figcaption>总览（Gwyddion 色标，每格色标独立，scale bar = 1 µm）</figcaption></figure>`,
+    `<figure><img src="${URL.createObjectURL(state.imgBar)}" alt="bar"><figcaption>各样品 Ra / Rq 对比</figcaption></figure>`
+  ];
+  if (state.imgHist) {
+    figs.push(`<figure><img src="${URL.createObjectURL(state.imgHist)}" alt="hist"><figcaption>颗粒尺寸分布</figcaption></figure>`);
+  }
+  ov.innerHTML = `<h2>汇总图</h2><div class="figs">${figs.join('')}</div>`;
 
   // 样品卡片
   const cards = $('#cards');
   cards.classList.remove('hidden');
   cards.innerHTML = '<h2>逐样品图集</h2>' + items.map((i, k) => {
-    const metrics = `Ra ${i.rs.Ra.toFixed(2)} · Rq ${i.rs.Rq.toFixed(2)} · Rmax ${i.rs.Rmax.toFixed(1)} · Rz ${i.rs.Rz.toFixed(1)} nm ｜ ${i.grain ? '晶粒织构' : '平坦 + 颗粒'}`;
-    const extra = i.grain
-      ? `晶粒 ${i.grainCount} 个 · 平均 ${i.grainMean.toFixed(0)} nm · 中位 ${i.grainMed.toFixed(0)} nm`
-      : `颗粒 ${i.particles.length} 个 · ${(i.particles.length / (i.scanUm ** 2)).toFixed(2)} 个/µm²`;
-    const figs = [
+    const s = i.pstat;
+    const metrics = `Ra ${i.rs.Ra.toFixed(2)} · Rq ${i.rs.Rq.toFixed(2)} · Rmax ${i.rs.Rmax.toFixed(1)} · Rz ${i.rs.Rz.toFixed(1)} nm`;
+    const extra = s.n
+      ? `颗粒 ${s.n} 个 · ${s.density.toFixed(2)} 个/µm² · 均径 ${s.dMean.toFixed(0)} nm · 均高 ${s.hMean.toFixed(1)} nm`
+      : `未检出颗粒（阈值 ${s.thrNm.toFixed(1)} nm）`;
+    const figList = [
       `<figure><img loading="lazy" src="${URL.createObjectURL(i.img2d)}"><figcaption>2D 高度图</figcaption></figure>`,
       `<figure><img loading="lazy" src="${URL.createObjectURL(i.img3d)}"><figcaption>3D 形貌</figcaption></figure>`,
-      i.imgGrain ? `<figure><img loading="lazy" src="${URL.createObjectURL(i.imgGrain)}"><figcaption>晶粒分割</figcaption></figure>` : ''
+      `<figure><img loading="lazy" src="${URL.createObjectURL(i.imgPart)}"><figcaption>颗粒标记</figcaption></figure>`
     ].join('');
     return `<details class="card" ${k === 0 ? 'open' : ''}>
       <summary><b>${i.name}</b><span class="sub">${extra}</span></summary>
       <p class="metrics">${metrics}</p>
-      <div class="figs">${figs}</div>
+      <div class="figs">${figList}</div>
     </details>`;
   }).join('');
 
@@ -21758,9 +21764,10 @@ function renderAll(failed) {
     <div class="btns">
       <button id="btnZip" class="btn">打包 ZIP（图片 + CSV + Word）</button>
       <button id="btnDocx" class="btn ghost">仅下载 Word 报告</button>
-      <button id="btnCsv" class="btn ghost">仅下载 CSV</button>
+      <button id="btnCsv" class="btn ghost">汇总 CSV</button>
+      <button id="btnCsvP" class="btn ghost">颗粒明细 CSV</button>
     </div>
-    <p class="note">Word 报告包含概览、结论、三张统计表、总览图与逐样品图，可直接用于周报或送样记录。</p>`;
+    <p class="note">Word 报告包含概览、结论、粗糙度表、颗粒统计表、颗粒尺寸分布图、总览图与逐样品图。</p>`;
 
   $('#btnZip').onclick = async () => {
     $('#btnZip').disabled = true;
@@ -21786,14 +21793,12 @@ function renderAll(failed) {
     }
   };
   $('#btnCsv').onclick = () => {
-    const head = ['样品', '表面类型', '扫描范围 (µm)', 'Ra (nm)', 'Rq (nm)', 'Rmax (nm)', 'Rz (nm)', 'Ssk', 'Sku', '晶粒数', '平均晶粒 (nm)', '颗粒数'];
-    const rows = items.map((i) => [
-      i.name, i.grain ? '晶粒织构' : '平坦+颗粒', i.scanUm,
-      i.rs.Ra.toFixed(3), i.rs.Rq.toFixed(3), i.rs.Rmax.toFixed(2), i.rs.Rz.toFixed(2),
-      i.rs.Ssk.toFixed(2), i.rs.Sku.toFixed(2),
-      i.grain ? i.grainCount : '', i.grain ? i.grainMean.toFixed(1) : '', i.particles.length
-    ]);
-    download(new Blob([toCSV(head, rows)], { type: 'text/csv;charset=utf-8' }), `AFM汇总_${stamp()}.csv`);
+    download(new Blob([summaryCSV(items)], { type: 'text/csv;charset=utf-8' }),
+      `AFM汇总_${stamp()}.csv`);
+  };
+  $('#btnCsvP').onclick = () => {
+    download(new Blob([particleCSV(items)], { type: 'text/csv;charset=utf-8' }),
+      `AFM颗粒明细_${stamp()}.csv`);
   };
 
   const top = document.getElementById('summary');
