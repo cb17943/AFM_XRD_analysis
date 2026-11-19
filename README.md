@@ -1,4 +1,4 @@
-# AFM 表面形貌分析（网页版）
+# AFM 表面形貌分析（网页版）  https://cb17943.github.io/AFM_analysis/
 
 在浏览器里直接处理 **Asylum Research MFP-3D / Cypher** 导出的 `.ibw` 数据：解析、去倾斜、算粗糙度、分水岭分割晶粒、统计颗粒，输出 2D／3D 图、汇总表和 Word 报告。
 
