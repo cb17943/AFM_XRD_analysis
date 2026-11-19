@@ -1,6 +1,7 @@
-# AFM 表面形貌分析（网页版）  https://cb17943.github.io/AFM_analysis/
+# AFM 表面形貌分析（网页版） 
 
-在浏览器里直接处理 **Asylum Research MFP-3D / Cypher** 导出的 `.ibw` 数据：解析、去倾斜、算粗糙度、分水岭分割晶粒、统计颗粒，输出 2D／3D 图、汇总表和 Word 报告。
+在浏览器里打开 https://cb17943.github.io/AFM_analysis/
+直接处理 **Asylum Research MFP-3D / Cypher** 导出的 `.ibw` 数据：解析、去倾斜、算粗糙度、分水岭分割晶粒、统计颗粒，输出 2D／3D 图、汇总表和 Word 报告。
 
 **全部计算在本机浏览器完成，文件不上传到任何服务器。** 没有后端、没有数据库、没有依赖。
 
@@ -23,7 +24,7 @@
 
 ## 使用
 
-1. 用 Chrome / Edge / Safari 打开 `index.html`（双击即可，无需服务器）。
+1. 用 Chrome / Edge / Safari 打开 https://cb17943.github.io/AFM_analysis/。
 2. 把 `.ibw` 文件或整个数据文件夹拖进页面，或点「选择文件 / 选择文件夹」。
 3. 等待处理完成，页面会给出汇总表、总览图和逐样品图集。
 4. 点「打包 ZIP」一次性拿到图片 + CSV + Word。
