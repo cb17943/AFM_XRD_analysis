@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>AFM 表面形貌与颗粒分析 · 在线</title>
-<meta name="description" content="在浏览器中直接解析 Asylum MFP-3D 的 .ibw 数据，输出粗糙度、颗粒统计与 Word 报告，文件不上传。">
+<title>XRD &amp; AFM 数据分析 · 在线</title>
+<meta name="description" content="浏览器本地解析 XRD（.xrdml/.txt/.xy）与 AFM（.ibw）数据：摇摆曲线 FWHM 拟合、2θ 峰位标注、表面粗糙度、晶粒分割与颗粒统计，输出图表与 Word 报告，文件不上传。">
 <style>
 :root{
   --bg:#faf8f5; --ink:#1c1917; --sub:#6b645c; --line:#e6e0d7; --card:#fff;
@@ -24,6 +24,19 @@ header{border-bottom:2px solid var(--ink);padding-bottom:18px;margin-bottom:26px
 h1{font-size:29px;margin:0 0 8px;letter-spacing:.3px;font-weight:700}
 .lede{margin:0;color:#3f3a34;font-size:14.5px;max-width:900px}
 .lede b{color:var(--accent)}
+
+/* 标签页 */
+.tabs{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}
+.tab{
+  border:1px solid var(--line);background:#fff;color:var(--sub);
+  padding:8px 18px;border-radius:8px 8px 0 0;font:inherit;font-size:14px;
+  cursor:pointer;border-bottom:none;transition:.15s;
+}
+.tab:hover{color:var(--ink);background:var(--soft)}
+.tab.active{
+  color:#fff;background:var(--accent);border-color:var(--accent);font-weight:600;
+}
+.pane{padding-top:6px}
 
 /* 拖放区 */
 .drop{
@@ -51,6 +64,43 @@ h1{font-size:29px;margin:0 0 8px;letter-spacing:.3px;font-weight:700}
 .progress .bar{flex:1;height:8px;background:#ece5da;border-radius:6px;overflow:hidden}
 .progress .bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#b86b2e,#e0a35c);transition:width .2s}
 .progress span{font-size:12.5px;color:var(--sub);min-width:220px;text-align:right}
+
+/* 绘图参数 */
+.ctl{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  background:var(--card);border:1px solid var(--line);border-radius:10px;
+  padding:10px 14px;margin:0 0 22px;font-size:13.5px;
+}
+.ctl label{font-weight:600;color:var(--ink)}
+.ctl input{
+  width:88px;padding:6px 9px;border:1px solid #cfc4b3;border-radius:6px;
+  font:inherit;font-size:14px;color:var(--ink);background:#fff;
+}
+.ctl input:focus{outline:2px solid rgba(184,107,46,.35);border-color:var(--accent2)}
+.ctl select{
+  padding:6px 10px;border:1px solid #cfc4b3;border-radius:6px;
+  font:inherit;font-size:14px;color:var(--ink);background:#fff;
+}
+.ctl .chk{display:inline-flex;align-items:center;gap:6px;font-weight:400;color:var(--ink)}
+.ctl .chk input{width:auto;accent-color:var(--accent2)}
+.ctl .unit{color:var(--sub);margin-left:-4px}
+.ctl .hint{color:var(--sub);font-size:12.5px}
+.ctl .hint.warn{color:#8a4b12}
+.ctl .hint b{color:var(--accent2)}
+.btn.tiny{padding:4px 10px;font-size:12.5px;border-radius:6px}
+
+/* 每张图的 scale bar 微调条 */
+.sbline{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  margin:2px 0 0;padding:6px 16px 6px 40px;font-size:12.5px;color:var(--sub);
+}
+.sbline label{font-weight:600;color:var(--ink)}
+.sbline input{
+  width:82px;padding:4px 8px;border:1px solid #cfc4b3;border-radius:6px;
+  font:inherit;font-size:13px;color:var(--ink);background:#fff;
+}
+.sbline input:focus{outline:2px solid rgba(184,107,46,.35);border-color:var(--accent2)}
+.sbline .unit{margin-left:-4px}
 
 /* 概览 */
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin-bottom:8px}
@@ -130,9 +180,98 @@ footer .dot{opacity:.5}
 <div class="wrap">
 
 <header>
-  <h1>AFM 表面形貌与颗粒分析</h1>
-  <p class="lede">拖入 Asylum MFP-3D 的 <code>.ibw</code> 数据，浏览器本地完成解析、去倾斜、粗糙度与颗粒识别，输出 2D／3D 图、颗粒标记图、汇总表和 Word 报告。<b>文件不会上传到任何服务器。</b></p>
+  <h1>XRD &amp; AFM 数据分析</h1>
+  <p class="lede">拖入测试数据，浏览器本地完成解析、计算、出图与报告。<b>文件不会上传到任何服务器。</b>
+    XRD 支持 <code>.xrdml</code>／<code>.txt</code>／<code>.xy</code>，AFM 支持 Asylum MFP-3D 的 <code>.ibw</code>。</p>
+  <nav class="tabs">
+    <button class="tab active" data-pane="xrd">XRD 摇摆曲线</button>
+    <button class="tab" data-pane="afm">AFM 表面形貌</button>
+  </nav>
 </header>
+
+<!-- ==================== XRD ==================== -->
+<div id="pane-xrd" class="pane">
+
+<section>
+  <div id="xDrop" class="drop">
+    <div class="dropmark">↓</div>
+    <p class="big">把 <code>.xrdml</code> / <code>.txt</code> / <code>.xy</code> 拖到这里</p>
+    <p class="hint">也可以选文件夹，会一并读入子文件夹中的文件。</p>
+    <div class="btns">
+      <label class="btn">选择文件<input type="file" id="xFile" multiple accept=".xrdml,.txt,.xy" hidden></label>
+      <label class="btn ghost">选择文件夹<input type="file" id="xDir" webkitdirectory hidden></label>
+    </div>
+  </div>
+
+  <div class="ctl">
+    <label for="xMode">扫描类型</label>
+    <select id="xMode">
+      <option value="auto" selected>自动识别</option>
+      <option value="omega">Omega 摇摆曲线</option>
+      <option value="2theta">2θ-θ 扫描</option>
+    </select>
+
+    <label for="xFit">拟合方法</label>
+    <select id="xFit">
+      <option value="Voigt" selected>Voigt（推荐）</option>
+      <option value="Lorentzian">Lorentzian</option>
+      <option value="Gaussian">Gaussian</option>
+      <option value="All">三种都做</option>
+      <option value="None">只算直接半高宽</option>
+    </select>
+
+    <label for="xWin">拟合窗口</label>
+    <select id="xWin">
+      <option value="local" selected>主峰局部窗口</option>
+      <option value="full">全谱（原脚本口径）</option>
+    </select>
+
+    <label class="chk"><input type="checkbox" id="xBg" checked> 扣背景（ALS）</label>
+    <label class="chk"><input type="checkbox" id="xRes"> 显示残差</label>
+    <span class="hint">改参数后会按已读入的数据重算</span>
+  </div>
+
+  <div id="xProgress" class="progress hidden"><div class="bar"><i></i></div><span></span></div>
+</section>
+
+<section id="xSummary" class="hidden"></section>
+<section id="xTable" class="hidden"></section>
+<section id="xCards" class="hidden"></section>
+<section id="xDown" class="hidden"></section>
+
+<section id="xEmpty" class="about">
+  <h2>它做什么</h2>
+  <div class="grid3">
+    <div>
+      <h3>解析</h3>
+      <p><code>.xrdml</code> 自动适配 XRDML 2.0–2.2 命名空间，取 <code>counts</code> 与扫描轴起止角；两列文本按空白/逗号/制表符切分。</p>
+    </div>
+    <div>
+      <h3>计算</h3>
+      <p>ALS 扣背景 → Savitzky-Golay 平滑 → 突出度寻峰 → 直接半高法与 Voigt／Lorentzian／Gaussian 最小二乘拟合，给出 FWHM 与 R²。</p>
+    </div>
+    <div>
+      <h3>输出</h3>
+      <p>带半高线、FWHM 标记与残差面板的拟合图，汇总表，CSV 与 Word 报告，可打包成 ZIP。</p>
+    </div>
+  </div>
+  <h2>口径说明</h2>
+  <ul class="notes">
+    <li>背景：非对称最小二乘（lam=1e7、p=0.01、10 次迭代），带状 Cholesky 求解，与 Python 版同解。</li>
+    <li>寻峰：窗宽约 1% 点数的 SG 平滑；高度 ≥ 5% 峰值、突出度 ≥ 2% 峰值、最小间距 0.5% 点数；取突出度最大者为主峰。</li>
+    <li>直接半高法：峰两侧半高处线性插值（左右都插值）。</li>
+    <li>拟合：默认在主峰 ±8 倍直接半高宽的窗口内做 LM 拟合，参数界限放开；选「全谱」可复现原脚本口径。</li>
+    <li>Voigt 的复误差函数用 Weideman(1994) 算法（36 阶），与 scipy 相对误差约 1e-14。</li>
+    <li><b>扫描类型</b>：优先读 xrdml 的 <code>scanAxis</code>，其次看文件名（omega / rocking / 2theta），
+      最后按角度跨度猜（&gt;5° 判 2θ，&lt;1.5° 判 Omega）；都判不出来会弹窗让你选。</li>
+    <li><b>2θ-θ 扫描</b>：横轴 2θ、纵轴取对数，只标注每个峰的峰位，不做 FWHM 拟合；峰位在扣背景后的曲线上判定，图上仍画原始强度。</li>
+  </ul>
+</section>
+
+</div>
+
+<!-- ==================== AFM ==================== -->
+<div id="pane-afm" class="pane hidden">
 
 <section>
   <div id="drop" class="drop">
@@ -145,6 +284,13 @@ footer .dot{opacity:.5}
     </div>
   </div>
   <div id="progress" class="progress hidden"><div class="bar"><i></i></div><span></span></div>
+
+  <div class="ctl">
+    <label>scale bar</label>
+    <span class="hint">默认为<b>自动</b>：每张图按自己的扫描范围取约 1/4 的整齐长度（1/2/5×10ⁿ），
+      短于 1 µm 时自动改用 nm 标注。需要改时在下方每张图里单独填长度即可，只影响标注、不影响统计。</span>
+    <button id="sbarAutoAll" class="btn ghost tiny" type="button">全部恢复自动</button>
+  </div>
 </section>
 
 <section id="summary" class="hidden"></section>
@@ -162,27 +308,33 @@ footer .dot{opacity:.5}
     </div>
     <div>
       <h3>计算</h3>
-      <p>一阶最小二乘去倾斜 → Ra / Rq / Rmax / Rz / Ssk / Sku；再做背景扣除与自适应阈值分割，识别孤立颗粒并统计数量、面密度、尺寸与高度。</p>
+      <p>一阶最小二乘去倾斜 → Ra / Rq / Rmax / Rz / Ssk / Sku；再按 Ra/Rmax 与颗粒覆盖率判定表面类型：
+        <b>连续晶粒织构</b>走出晶粒分割（分水岭）与尺寸统计，<b>平坦基底 + 孤立颗粒</b>走高通背景 + 自适应阈值颗粒识别。</p>
     </div>
     <div>
       <h3>输出</h3>
-      <p>Gwyddion 色标 + 色标条 + 1 µm scale bar 的 2D/3D 图与颗粒标记图，粗糙度表、颗粒统计表、颗粒尺寸分布、Word 报告，可打包成 ZIP 下载。</p>
+      <p>Gwyddion 色标 + 色标条 + 自动 scale bar 的 2D/3D 图与晶粒分割／颗粒标记图，粗糙度表、晶粒表、颗粒表、尺寸分布，
+        Word 报告（八节，与桌面版一致），可打包成 ZIP 下载。</p>
     </div>
   </div>
   <h2>口径说明</h2>
   <ul class="notes">
     <li>去面只做一阶平面拟合（去样品倾斜），不做逐行滤波，因此 Ra 包含真实长波起伏。</li>
-    <li>颗粒识别：15 px（约 0.15 µm）高斯背景 → 相减得高通残差 → 残差 MAD 估计噪声 σ → 阈值 max(8σ, 3 nm) → 8 邻域连通域 → 面积 ≥ 6 px 计为颗粒。</li>
-    <li>尺寸为等效圆直径 2√(A/π)；高度为颗粒最高点相对全幅背景中位数的高度；覆盖率 = 颗粒像素占全幅比例。</li>
+    <li><b>表面类型</b>：Ra/Rmax &lt; 0.06，或颗粒覆盖率 &gt; 0.2% 且颗粒均高 &gt; 3Ra（且颗粒数 ≥ 5），判为「平坦基底 + 孤立颗粒」，此时不出晶粒统计；其余判为「连续晶粒织构」。判定结果在表 1 里可见，悬停可看依据。</li>
+    <li><b>晶粒分割</b>：σ=1 px 高斯平滑 → 归一到 0–1 → 以 0.45×P99 为阈值取高度局部极大作种子（最小间距 3 px）→ 负高度分水岭 → 面积 ≥ 12 px 计入，触边晶粒剔除。等效圆直径 2√(A/π)，长轴由二阶中心矩求得。</li>
+    <li><b>颗粒识别</b>：15 px（约 0.15 µm）高斯背景 → 相减得高通残差 → 残差 MAD 估计噪声 σ → 阈值 max(8σ, 3 nm) → 8 邻域连通域 → 面积 ≥ 6 px 计为颗粒。</li>
+    <li>尺寸为等效圆直径；颗粒高度为最高点相对全幅背景中位数的高度；覆盖率 = 颗粒像素占全幅比例。</li>
     <li>阈值随各图噪声自适应：平滑表面可检出数 nm 级颗粒；粗糙表面 σ 大、阈值抬高，报 0 个表示未检出高于噪声的孤立凸起，不等于表面洁净。</li>
-    <li>本页不做晶粒分割与晶粒尺寸统计；如需晶粒/织构评价，请用配套的桌面版脚本。</li>
+    <li><b>scale bar</b>：默认自动，按每张图自己的扫描范围取约 1/4 的整齐长度，短于 1 µm 改用 nm。某张图需要固定长度时，在该图卡片里填数值即可（夹在扫描范围的 2%–90%），留空恢复自动；只改标注，不影响任何统计值。</li>
   </ul>
 </section>
+
+</div>
 
 <footer>
   <span>纯前端实现 · 无后端 · 无追踪</span>
   <span class="dot">·</span>
-  <span>适用于 Asylum Research MFP-3D / Cypher 导出的 .ibw（ARDF v2）</span>
+  <span>XRD：XRDML 2.0–2.2 / 两列文本；AFM：Asylum MFP-3D 的 .ibw（ARDF v2）</span>
 </footer>
 
 </div>
@@ -20509,9 +20661,12 @@ function roughStats(z) {
   };
 }
 
-/* ---------- 高斯平滑（可分离，边界复制） ---------- */
-function gaussianBlur(src, nx, ny, sigma) {
-  const r = Math.max(1, Math.ceil(sigma * 3));
+/* ---------- 高斯平滑（可分离，边界复制）
+ * trunc：核半径 = ceil(trunc·σ)。颗粒识别的背景尺度沿用 3（口径不变），
+ * 晶粒分割用 4，与 scipy.ndimage.gaussian_filter 的默认 truncate=4 对齐。
+ */
+function gaussianBlur(src, nx, ny, sigma, trunc = 3) {
+  const r = Math.max(1, Math.ceil(sigma * trunc));
   const ker = new Float32Array(2 * r + 1);
   let sum = 0;
   for (let i = -r; i <= r; i++) {
@@ -20676,6 +20831,246 @@ function detectParticles(zm, nx, ny, pxUm, opt = {}) {
   return { recs, stat, labels: lbl, mask };
 }
 
+/* ---------- 可分离极大值滤波（peak_local_max 用） ---------- */
+function maxFilter(src, nx, ny, r) {
+  const tmp = new Float32Array(nx * ny);
+  const out = new Float32Array(nx * ny);
+  for (let y = 0; y < ny; y++) {
+    const row = y * nx;
+    for (let x = 0; x < nx; x++) {
+      const x0 = x - r < 0 ? 0 : x - r, x1 = x + r >= nx ? nx - 1 : x + r;
+      let m = -Infinity;
+      for (let xx = x0; xx <= x1; xx++) { const v = src[row + xx]; if (v > m) m = v; }
+      tmp[row + x] = m;
+    }
+  }
+  for (let y = 0; y < ny; y++) {
+    const y0 = y - r < 0 ? 0 : y - r, y1 = y + r >= ny ? ny - 1 : y + r;
+    for (let x = 0; x < nx; x++) {
+      let m = -Infinity;
+      for (let yy = y0; yy <= y1; yy++) { const v = tmp[yy * nx + x]; if (v > m) m = v; }
+      out[y * nx + x] = m;
+    }
+  }
+  return out;
+}
+
+/* ---------- 高度局部极大 → 分水岭种子
+ * 等价 skimage.feature.peak_local_max(min_distance, threshold_abs, exclude_border=False)：
+ * 方形 (2r+1) 邻域内的最大值，且不低于阈值；同一平台上连续的几个像素合并成一个种子。
+ */
+function peakMarkers(zn, nx, ny, minDist, thrAbs) {
+  const mx = maxFilter(zn, nx, ny, minDist);
+  const mask = new Uint8Array(nx * ny);
+  for (let i = 0; i < zn.length; i++) {
+    if (zn[i] >= mx[i] && zn[i] >= thrAbs) mask[i] = 1;
+  }
+  const { lbl, count } = labelMask(mask, nx, ny);
+  if (!count) return { markers: new Int32Array(nx * ny), nlab: 0 };
+  const sx = new Float64Array(count + 1), sy = new Float64Array(count + 1);
+  const cnt = new Float64Array(count + 1);
+  for (let y = 0; y < ny; y++) {
+    for (let x = 0; x < nx; x++) {
+      const l = lbl[y * nx + x];
+      if (!l) continue;
+      sx[l] += x; sy[l] += y; cnt[l]++;
+    }
+  }
+  const markers = new Int32Array(nx * ny);
+  for (let l = 1; l <= count; l++) {
+    if (!cnt[l]) continue;
+    const cx = Math.round(sx[l] / cnt[l]), cy = Math.round(sy[l] / cnt[l]);
+    markers[cy * nx + cx] = l;
+  }
+  return { markers, nlab: count };
+}
+
+/* ---------- 分水岭（Meyer 优先队列洪水）
+ * 与 skimage.segmentation.watershed(-zn, markers, mask=全幅) 同思路：
+ * 种子按高度入堆，每次弹最低点并把未标注的 4 邻域并入当前标签。
+ */
+function watershedFlood(neg, nx, ny, markers) {
+  const n = nx * ny;
+  const seg = Int32Array.from(markers);
+
+  const cap = n + 32;
+  const hk = new Float32Array(cap);   // 键：-zn
+  const hv = new Int32Array(cap);     // 值：像素下标
+  let hn = 0;
+  let popIdx = -1;
+
+  function push(k, v) {
+    if (hn >= cap) return;
+    let c = hn++;
+    hk[c] = k; hv[c] = v;
+    while (c > 0) {
+      const p = (c - 1) >> 1;
+      if (hk[p] <= hk[c]) break;
+      const tk = hk[p], tv = hv[p];
+      hk[p] = hk[c]; hv[p] = hv[c];
+      hk[c] = tk; hv[c] = tv;
+      c = p;
+    }
+  }
+  function pop() {
+    popIdx = hv[0];
+    const last = --hn;
+    if (last > 0) {
+      const lk = hk[last], lv = hv[last];
+      let c = 0;
+      for (;;) {
+        let m = c;
+        const l = 2 * c + 1, r = l + 1;
+        if (l < last && hk[l] < hk[m]) m = l;
+        if (r < last && hk[r] < hk[m]) m = r;
+        if (m === c) break;
+        const tk = hk[m], tv = hv[m];
+        hk[m] = hk[c]; hv[m] = hv[c];
+        hk[c] = tk; hv[c] = tv;
+        c = m;
+      }
+      hk[c] = lk; hv[c] = lv;
+    }
+  }
+
+  for (let i = 0; i < n; i++) if (seg[i]) push(neg[i], i);
+
+  const dxs = [1, -1, 0, 0], dys = [0, 0, 1, -1];
+  while (hn > 0) {
+    pop();
+    const idx = popIdx;
+    const l = seg[idx];
+    const x = idx % nx, y = (idx / nx) | 0;
+    for (let d = 0; d < 4; d++) {
+      const xx = x + dxs[d], yy = y + dys[d];
+      if (xx < 0 || xx >= nx || yy < 0 || yy >= ny) continue;
+      const j = yy * nx + xx;
+      if (seg[j]) continue;
+      seg[j] = l;
+      push(neg[j], j);
+    }
+  }
+  return seg;
+}
+
+/* ---------- 每个晶粒的几何量（面积 / 等效直径 / 长轴 / 是否触边） ---------- */
+function grainRegions(seg, nx, ny, nlab, pxUm, minArea) {
+  const area = new Float64Array(nlab + 1);
+  const sx = new Float64Array(nlab + 1), sy = new Float64Array(nlab + 1);
+  const sxx = new Float64Array(nlab + 1), syy = new Float64Array(nlab + 1);
+  const sxy = new Float64Array(nlab + 1);
+  const r0 = new Int32Array(nlab + 1).fill(1 << 30), r1 = new Int32Array(nlab + 1).fill(-1);
+  const c0 = new Int32Array(nlab + 1).fill(1 << 30), c1 = new Int32Array(nlab + 1).fill(-1);
+
+  for (let y = 0; y < ny; y++) {
+    for (let x = 0; x < nx; x++) {
+      const l = seg[y * nx + x];
+      if (!l) continue;
+      area[l]++;
+      sx[l] += x; sy[l] += y;
+      sxx[l] += x * x; syy[l] += y * y; sxy[l] += x * y;
+      if (y < r0[l]) r0[l] = y; if (y > r1[l]) r1[l] = y;
+      if (x < c0[l]) c0[l] = x; if (x > c1[l]) c1[l] = x;
+    }
+  }
+
+  const recs = [];
+  for (let l = 1; l <= nlab; l++) {
+    const a = area[l];
+    if (a < minArea) continue;
+    const mx = sx[l] / a, my = sy[l] / a;
+    // 二阶中心矩 → 主轴方差 → 长轴（与 skimage regionprops.axis_major_length 同定义）
+    const vxx = sxx[l] / a - mx * mx;
+    const vyy = syy[l] / a - my * my;
+    const vxy = sxy[l] / a - mx * my;
+    const half = (vxx - vyy) / 2;
+    const lam1 = (vxx + vyy) / 2 + Math.sqrt(half * half + vxy * vxy);
+    recs.push({
+      label: l, area: a,
+      cx: mx, cy: my,
+      dEq: 2 * Math.sqrt(a / Math.PI) * pxUm * 1000,
+      dMajor: 4 * Math.sqrt(Math.max(lam1, 0)) * pxUm * 1000,
+      edge: r0[l] === 0 || c0[l] === 0 || r1[l] === ny - 1 || c1[l] === nx - 1
+    });
+  }
+  return recs;
+}
+
+/* ---------- 晶粒分割 + 尺寸统计
+ * 口径：σ=1 px 高斯 → 归一到 0–1 → 阈值 0.45×P99 取高度局部极大作种子
+ *      → 负高度分水岭 → 面积 ≥ 12 px 计入，触边晶粒不参与统计。
+ */
+function grainAnalysis(zm, nx, ny, pxUm) {
+  const zs = gaussianBlur(zm, nx, ny, 1.0, 4);
+  let mn = Infinity, mx = -Infinity;
+  for (let i = 0; i < zs.length; i++) {
+    if (zs[i] < mn) mn = zs[i];
+    if (zs[i] > mx) mx = zs[i];
+  }
+  const span = (mx - mn) || 1;
+  const zn = new Float32Array(zs.length);
+  for (let i = 0; i < zs.length; i++) zn[i] = (zs[i] - mn) / span;
+
+  const sorted = Float32Array.from(zn).sort();
+  const p99 = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.99))];
+  const thr = 0.45 * p99;
+
+  const { markers, nlab } = peakMarkers(zn, nx, ny, 3, thr);
+  if (!nlab) return { seg: null, recs: [], stat: null };
+
+  const neg = new Float32Array(zn.length);
+  for (let i = 0; i < zn.length; i++) neg[i] = -zn[i];
+  const seg = watershedFlood(neg, nx, ny, markers);
+  const recs = grainRegions(seg, nx, ny, nlab, pxUm, 12);
+
+  const good = recs.filter((r) => !r.edge);
+  if (!good.length) {
+    return { seg, recs, stat: { n: 0, dMean: 0, dMed: 0, dStd: 0, cv: 0, dP90: 0, dMajorMean: 0, density: 0 }, empty: true };
+  }
+  const deq = good.map((r) => r.dEq).sort((a, b) => a - b);
+  const dmaj = good.map((r) => r.dMajor);
+  const mean = deq.reduce((a, b) => a + b, 0) / deq.length;
+  const variance = deq.reduce((a, b) => a + (b - mean) * (b - mean), 0) / Math.max(1, deq.length - 1);
+  const std = Math.sqrt(variance);
+  const q = (t) => deq[Math.min(deq.length - 1, Math.floor(deq.length * t))];
+
+  return {
+    seg, recs,
+    stat: {
+      n: good.length,
+      dMean: mean,
+      dMed: q(0.5),
+      dStd: std,
+      cv: mean > 0 ? std / mean : 0,
+      dP90: q(0.9),
+      dMajorMean: dmaj.reduce((a, b) => a + b, 0) / dmaj.length,
+      density: good.length / (pxUm * nx * pxUm * ny)
+    },
+    values: deq
+  };
+}
+
+/* ---------- 表面类型判定
+ * 依据：① Ra/Rmax 很低 → 高度分布是「窄基底 + 少数高突起」；
+ *      ② 颗粒覆盖率可观且颗粒高度远高于 Ra。
+ * 与 Python classify_surface 完全一致，决定出晶粒统计还是颗粒统计。
+ */
+function classifySurface(rs, precs, cover) {
+  const ratio = rs.Ra / (rs.Rmax + 1e-12);
+  const meanH = precs.length
+    ? precs.reduce((a, r) => a + r.hNm, 0) / precs.length : 0;
+  if (ratio < 0.06) {
+    return { grain: false, type: '平坦+颗粒', why: `平坦基底+孤立颗粒（Ra/Rmax=${ratio.toFixed(3)}）` };
+  }
+  if (cover > 0.002 && meanH > 3 * rs.Ra && precs.length >= 5) {
+    return {
+      grain: false, type: '平坦+颗粒',
+      why: `平坦基底+孤立颗粒（颗粒覆盖 ${(cover * 100).toFixed(2)}%，均高 ${meanH.toFixed(0)} nm）`
+    };
+  }
+  return { grain: true, type: '晶粒织构', why: `连续晶粒织构（Ra/Rmax=${ratio.toFixed(3)}）` };
+}
+
 /* ---------- 单个文件全流程 ---------- */
 function analyzeBuffer(buf, fileName, onStep) {
   const d = parseIBW(buf, fileName);
@@ -20684,12 +21079,20 @@ function analyzeBuffer(buf, fileName, onStep) {
   const rs = roughStats(z0);
   if (onStep) onStep('识别颗粒…');
   const p = detectParticles(z0, d.nx, d.ny, d.pxUm);
+  if (onStep) onStep('判定表面类型…');
+  const cls = classifySurface(rs, p.recs, p.stat.cover);
+  let grain = null;
+  if (cls.grain) {
+    if (onStep) onStep('分割晶粒…');
+    grain = grainAnalysis(z0, d.nx, d.ny, d.pxUm);
+  }
 
   return {
     name: fileName.replace(/\.ibw$/i, '').replace(/_\d{4}$/, ''),
     nx: d.nx, ny: d.ny, scanUm: d.scanUm, pxUm: d.pxUm,
     z: z0, rs,
     particles: p.recs, pstat: p.stat,
+    grain, surface: cls.type, surfaceWhy: cls.why, isGrain: cls.grain,
     cover: p.stat.cover, sigma: p.stat.sigmaNm, thr: p.stat.thrNm,
     meta: d.meta
   };
@@ -20700,9 +21103,9 @@ function analyzeBuffer(buf, fileName, onStep) {
  * draw.js — Canvas 绘图：2D 高度图 / 3D 形貌 / 颗粒标记 / 总览 / 统计图
  * ============================================================ */
 
-const FONT = '12px "Microsoft YaHei","PingFang SC","Hiragino Sans GB",sans-serif';
-const FONT_S = '10px "Microsoft YaHei","PingFang SC",sans-serif';
-const FONT_T = '13px "Microsoft YaHei","PingFang SC",sans-serif';
+const FONT = '17px "Microsoft YaHei","PingFang SC","Hiragino Sans GB",sans-serif';
+const FONT_S = '13px "Microsoft YaHei","PingFang SC",sans-serif';
+const FONT_T = '18px "Microsoft YaHei","PingFang SC",sans-serif';
 
 function setup(canvas, w, h) {
   const dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -20748,12 +21151,46 @@ function drawColorbar(ctx, x, y, w, h, lo, hi, unit = 'nm') {
     ctx.strokeStyle = '#888';
     ctx.stroke();
     ctx.textAlign = 'left';
-    ctx.fillText(fmt(v), x + w + 6, yy);
+    ctx.fillText(fmt(v), x + w + 7, yy);
   }
   ctx.textAlign = 'center';
   ctx.font = FONT_S;
-  ctx.fillText(unit, x + w / 2, y - 10);
+  ctx.fillText(unit, x + w / 2, y - 12);
   ctx.restore();
+}
+
+/* scale bar 长度：钳在 2%–90% 扫描范围之间，避免短到看不见或长到出框 */
+function clampBar(v, ext) {
+  let b = Number(v);
+  if (!isFinite(b) || b <= 0) b = 1;
+  const lo = ext * 0.02, hi = ext * 0.9;
+  return Math.min(hi, Math.max(lo, b));
+}
+
+/* 自动 scale bar：按本图自己的扫描范围取约 1/4 的「整齐」长度
+ * （只从 1 / 2 / 5 × 10ⁿ 里挑）。5 µm → 1 µm，2 µm → 0.5 µm，1 µm → 200 nm。
+ */
+function autoBar(ext) {
+  const e = Number(ext);
+  if (!(e > 0)) return 1;
+  const target = e * 0.25;
+  const mag = Math.pow(10, Math.floor(Math.log10(target)));
+  const norm = target / mag;
+  const mult = norm >= 5 ? 5 : norm >= 2 ? 2 : 1;
+  return mult * mag;
+}
+
+/* 长度标注：不足 1 µm 时改用 nm，避免出现 0.2 µm 这种不好读的写法 */
+function fmtLen(um) {
+  const v = Number(um);
+  if (!(v > 0)) return '—';
+  if (v < 1) return `${Math.round(v * 1000)} nm`;
+  return `${fmtUm(v)} µm`;
+}
+
+function fmtUm(v) {
+  if (Math.abs(v - Math.round(v)) < 1e-9) return String(Math.round(v));
+  return String(parseFloat(v.toFixed(2)));
 }
 
 function fmt(v) {
@@ -20816,10 +21253,10 @@ function drawImageData(ctx, img, x, y, w, h) {
 
 /* ---------- 2D 高度图 ---------- */
 function draw2D(canvas, item, opts = {}) {
-  const W = opts.W || 620, H = opts.H || 660;
+  const W = opts.W || 640, H = opts.H || 592;
   const ctx = setup(canvas, W, H);
 
-  const left = 66, top = 46, right = 96, bottom = 62;
+  const left = 88, top = 64, right = 108, bottom = 84;
   const side = Math.min(W - left - right, H - top - bottom);
   const px = left, py = top, pw = side, ph = side;
 
@@ -20843,36 +21280,37 @@ function draw2D(canvas, item, opts = {}) {
     const xx = px + t * pw, yy = py + (1 - t) * ph;
     ctx.beginPath(); ctx.moveTo(xx, py + ph); ctx.lineTo(xx, py + ph + 4);
     ctx.strokeStyle = '#666'; ctx.stroke();
-    ctx.fillText(fmt(t * ext), xx, py + ph + 14);
+    ctx.fillText(fmt(t * ext), xx, py + ph + 18);
     ctx.beginPath(); ctx.moveTo(px, yy); ctx.lineTo(px - 4, yy); ctx.stroke();
     ctx.textAlign = 'right';
-    ctx.fillText(fmt(t * ext), px - 7, yy);
+    ctx.fillText(fmt(t * ext), px - 9, yy);
     ctx.textAlign = 'center';
   }
   ctx.fillStyle = '#222'; ctx.font = FONT;
-  ctx.fillText('x (µm)', px + pw / 2, py + ph + 34);
+  ctx.fillText('x (µm)', px + pw / 2, py + ph + 40);
   ctx.save();
-  ctx.translate(16, py + ph / 2);
+  ctx.translate(20, py + ph / 2);
   ctx.rotate(-Math.PI / 2);
   ctx.fillText('y (µm)', 0, 0);
   ctx.restore();
 
   // 色标
-  drawColorbar(ctx, px + pw + 20, py, 16, ph, lo_nm, hi_nm);
+  drawColorbar(ctx, px + pw + 22, py, 18, ph, lo_nm, hi_nm);
 
-  // scale bar（1 µm）
-  const barPx = pw / ext;
-  drawScalebar(ctx, px + 14, py + ph - 16, barPx, ext, '1 µm');
-
-  // 叠加层（颗粒标记等）
+  // 叠加层（颗粒标记 / 晶粒边界），画在 scale bar 之下
   if (opts.overlay) opts.overlay(ctx, px, py, pw, ph);
+
+  // scale bar：默认按本图扫描范围自动选长度，传了 barUm 就按传入值
+  const sb = opts.barUm > 0 ? opts.barUm : autoBar(ext);
+  const barPx = (sb / ext) * pw;
+  drawScalebar(ctx, px + 14, py + ph - 16, barPx, ext, fmtLen(sb));
 
   // 标题
   ctx.fillStyle = '#111'; ctx.font = FONT_T; ctx.textAlign = 'center';
-  ctx.fillText(opts.title || item.name, W / 2 - 10, 20);
+  ctx.fillText(opts.title || item.name, W / 2 - 8, 26);
   if (opts.subtitle) {
     ctx.font = FONT_S; ctx.fillStyle = '#555';
-    ctx.fillText(opts.subtitle, W / 2 - 10, 36);
+    ctx.fillText(opts.subtitle, W / 2 - 8, 48);
   }
   return canvas;
 }
@@ -20881,13 +21319,14 @@ function draw2D(canvas, item, opts = {}) {
 function drawParticles(canvas, item, opts = {}) {
   const P = item.particles || [];
   const st = item.pstat || { density: 0, dMean: 0, hMean: 0, thrNm: 0, sigmaNm: 0 };
-  const W = opts.W || 620, H = opts.H || 566;
+  const W = opts.W || 640, H = opts.H || 592;
   const sub = P.length
     ? `面密度 ${st.density.toFixed(2)} 个/µm² · 均径 ${st.dMean.toFixed(0)} nm · 均高 ${st.hMean.toFixed(1)} nm`
     : `未检出孤立颗粒（阈值 ${st.thrNm.toFixed(1)} nm · 噪声 σ ${st.sigmaNm.toFixed(2)} nm）`;
 
   return draw2D(canvas, item, {
     W, H,
+    barUm: opts.barUm,
     title: `${item.name}   颗粒 n=${P.length}`,
     subtitle: sub,
     overlay(ctx, px, py, pw, ph) {
@@ -20914,9 +21353,51 @@ function drawParticles(canvas, item, opts = {}) {
   });
 }
 
+/* ---------- 晶粒分割图 ---------- */
+function drawGrains(canvas, item, opts = {}) {
+  const g = item.grain;
+  const st = g && g.stat;
+  const W = opts.W || 640, H = opts.H || 592;
+  const sub = st && st.n
+    ? `面密度 ${st.density.toFixed(2)} 个/µm² · 均径 ${st.dMean.toFixed(0)} nm · 中位 ${st.dMed.toFixed(0)} nm`
+    : '未得到有效晶粒（分割区域全部接触边缘）';
+
+  return draw2D(canvas, item, {
+    W, H,
+    barUm: opts.barUm,
+    title: `${item.name}   晶粒 n=${st ? st.n : 0}`,
+    subtitle: sub,
+    overlay(ctx, px, py, pw, ph) {
+      if (!g || !g.seg) return;
+      const nx = item.nx, ny = item.ny, seg = g.seg;
+      const ov = document.createElement('canvas');
+      ov.width = nx; ov.height = ny;
+      const octx = ov.getContext('2d');
+      const img = octx.createImageData(nx, ny);
+      const d = img.data;
+      for (let y = 0; y < ny; y++) {
+        for (let x = 0; x < nx; x++) {
+          const i = y * nx + x;
+          const l = seg[i];
+          const isB = (x + 1 < nx && seg[i + 1] !== l) || (y + 1 < ny && seg[i + nx] !== l);
+          if (!isB) continue;
+          // 与 zToImage 一致：数据第 0 行画在底部
+          const o = ((ny - 1 - y) * nx + x) * 4;
+          d[o] = 0; d[o + 1] = 217; d[o + 2] = 242; d[o + 3] = 235;
+        }
+      }
+      octx.putImageData(img, 0, 0);
+      ctx.save();
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(ov, px, py, pw, ph);
+      ctx.restore();
+    }
+  });
+}
+
 /* ---------- 3D 形貌 ---------- */
 function draw3D(canvas, item, opts = {}) {
-  const W = opts.W || 660, H = opts.H || 560;
+  const W = opts.W || 700, H = opts.H || 600;
   const ctx = setup(canvas, W, H);
 
   const n = Math.min(150, item.nx);
@@ -20998,7 +21479,7 @@ function draw3D(canvas, item, opts = {}) {
     if (P[o] < x0) x0 = P[o]; if (P[o] > x1) x1 = P[o];
     if (P[o + 1] < y0) y0 = P[o + 1]; if (P[o + 1] > y1) y1 = P[o + 1];
   }
-  const padL = 40, padT = 40, padR = 110, padB = 46;
+  const padL = 46, padT = 52, padR = 132, padB = 58;
   const sc = Math.min((W - padL - padR) / (x1 - x0), (H - padT - padB) / (y1 - y0));
   const ox = padL + (W - padL - padR - (x1 - x0) * sc) / 2 - x0 * sc;
   const oy = padT + (H - padT - padB - (y1 - y0) * sc) / 2 - y0 * sc;
@@ -21048,22 +21529,22 @@ function draw3D(canvas, item, opts = {}) {
     if (item.z[i] < zlo) zlo = item.z[i];
     if (item.z[i] > zhi) zhi = item.z[i];
   }
-  drawColorbar(ctx, W - 84, padT, 16, H - padT - padB, zlo * 1e9, zhi * 1e9);
+  drawColorbar(ctx, W - 96, padT, 18, H - padT - padB, zlo * 1e9, zhi * 1e9);
 
   // 底部标注扫描范围
   ctx.fillStyle = '#444'; ctx.font = FONT_S; ctx.textAlign = 'center';
-  ctx.fillText(`${fmt(ext)} × ${fmt(ext)} µm`, ox + (x0 + x1) / 2 * sc, H - 14);
+  ctx.fillText(`${fmt(ext)} × ${fmt(ext)} µm`, ox + (x0 + x1) / 2 * sc, H - 18);
 
   ctx.fillStyle = '#111'; ctx.font = FONT_T;
-  ctx.fillText(opts.title || (item.name + ' 3D'), W / 2 - 20, 18);
+  ctx.fillText(opts.title || (item.name + ' 3D'), W / 2 - 24, 24);
   return canvas;
 }
 
 /* ---------- 统计图 ---------- */
 function drawHist(canvas, values, title, opts = {}) {
-  const W = opts.W || 320, H = opts.H || 210;
+  const W = opts.W || 360, H = opts.H || 250;
   const ctx = setup(canvas, W, H);
-  const left = 40, bottom = 34, top = 26, right = 12;
+  const left = 50, bottom = 44, top = 34, right = 14;
   const pw = W - left - right, ph = H - top - bottom;
 
   if (!values.length) return canvas;
@@ -21089,7 +21570,7 @@ function drawHist(canvas, values, title, opts = {}) {
   ctx.strokeStyle = '#d02020'; ctx.lineWidth = 1.5;
   ctx.beginPath(); ctx.moveTo(xm, top); ctx.lineTo(xm, top + ph); ctx.stroke();
   ctx.fillStyle = '#d02020'; ctx.font = FONT_S; ctx.textAlign = 'left';
-  ctx.fillText(`均值 ${mean.toFixed(0)} nm`, Math.min(xm + 4, W - 78), top + 8);
+  ctx.fillText(`均值 ${mean.toFixed(0)} nm`, Math.min(xm + 5, W - 104), top + 10);
 
   // 轴
   ctx.strokeStyle = '#666'; ctx.lineWidth = 1;
@@ -21101,12 +21582,12 @@ function drawHist(canvas, values, title, opts = {}) {
     ctx.fillText(fmt(mn + (mx - mn) * t), xx, top + ph + 12);
   }
   ctx.textAlign = 'center';
-  ctx.fillText(opts.xlabel || '等效圆直径 (nm)', left + pw / 2, top + ph + 26);
+  ctx.fillText(opts.xlabel || '等效圆直径 (nm)', left + pw / 2, top + ph + 32);
   ctx.textAlign = 'left';
-  ctx.fillText('计数', 2, top + 6);
+  ctx.fillText('计数', 2, top + 10);
   ctx.textAlign = 'center';
   ctx.fillStyle = '#111'; ctx.font = FONT_S;
-  ctx.fillText(title, W / 2, 12);
+  ctx.fillText(title, W / 2, 16);
   return canvas;
 }
 
@@ -21114,15 +21595,15 @@ function drawHist(canvas, values, title, opts = {}) {
 function drawHistGrid(canvas, entries, opts = {}) {
   const cols = Math.min(opts.cols || 3, Math.max(1, entries.length));
   const rows = Math.ceil(entries.length / cols);
-  const cw = 330, ch = 224;
-  const W = cols * cw + 24, H = rows * ch + 62;
+  const cw = 372, ch = 268;
+  const W = cols * cw + 24, H = rows * ch + 70;
   const ctx = setup(canvas, W, H);
   ctx.fillStyle = '#faf8f5';
   ctx.fillRect(0, 0, W, H);
 
   entries.forEach((e, k) => {
     const x = 12 + (k % cols) * cw;
-    const y = 44 + Math.floor(k / cols) * ch;
+    const y = 52 + Math.floor(k / cols) * ch;
     const off = document.createElement('canvas');
     drawHist(off, e.values, e.name, {
       W: cw - 12, H: ch - 10, xlabel: opts.xlabel || '等效圆直径 (nm)'
@@ -21133,14 +21614,14 @@ function drawHistGrid(canvas, entries, opts = {}) {
   });
 
   ctx.fillStyle = '#111'; ctx.font = FONT_T; ctx.textAlign = 'center';
-  ctx.fillText(opts.title || '颗粒尺寸分布', W / 2, 22);
+  ctx.fillText(opts.title || '颗粒尺寸分布', W / 2, 26);
   return canvas;
 }
 
 function drawBar(canvas, rows, opts = {}) {
-  const W = opts.W || 880, H = opts.H || 300;
+  const W = opts.W || 960, H = opts.H || 350;
   const ctx = setup(canvas, W, H);
-  const left = 56, bottom = 78, top = 30, right = 16;
+  const left = 68, bottom = 94, top = 42, right = 18;
   const pw = W - left - right, ph = H - top - bottom;
   const n = rows.length;
   if (!n) return canvas;
@@ -21172,67 +21653,1057 @@ function drawBar(canvas, rows, opts = {}) {
   ctx.strokeStyle = '#666';
   ctx.beginPath(); ctx.moveTo(left, top); ctx.lineTo(left, top + ph); ctx.lineTo(left + pw, top + ph); ctx.stroke();
   ctx.fillStyle = '#222'; ctx.font = FONT_S; ctx.textAlign = 'left';
-  ctx.fillText('nm', 6, top - 8);
+  ctx.fillText('nm', 8, top - 12);
   // 图例
-  ctx.fillStyle = 'rgb(184,107,46)'; ctx.fillRect(left + 8, 8, 10, 10);
-  ctx.fillStyle = '#333'; ctx.fillText('Ra', left + 22, 13);
-  ctx.fillStyle = 'rgb(242,204,140)'; ctx.fillRect(left + 50, 8, 10, 10);
-  ctx.fillStyle = '#333'; ctx.fillText('Rq', left + 64, 13);
+  ctx.fillStyle = 'rgb(184,107,46)'; ctx.fillRect(left + 8, 12, 12, 12);
+  ctx.fillStyle = '#333'; ctx.fillText('Ra', left + 26, 19);
+  ctx.fillStyle = 'rgb(242,204,140)'; ctx.fillRect(left + 64, 12, 12, 12);
+  ctx.fillStyle = '#333'; ctx.fillText('Rq', left + 82, 19);
   return canvas;
 }
 
 /* ---------- 总览 ---------- */
 function drawOverview(canvas, items, opts = {}) {
   const cols = opts.cols || 4;
-  const cellW = 300, cellH = 300;
+  const cellW = 344, cellH = 344;
   const rows = Math.ceil(items.length / cols);
-  const W = cols * cellW + 20, H = rows * cellH + 50;
+  const W = cols * cellW + 20, H = rows * cellH + 62;
   const ctx = setup(canvas, W, H);
   ctx.fillStyle = '#faf8f5';
   ctx.fillRect(0, 0, W, H);
 
   items.forEach((it, k) => {
     const cx = 10 + (k % cols) * cellW;
-    const cy = 40 + Math.floor(k / cols) * cellH;
-    const side = cellW - 92;
+    const cy = 50 + Math.floor(k / cols) * cellH;
+    const side = cellW - 112;
     let lo = Infinity, hi = -Infinity;
     for (let i = 0; i < it.z.length; i++) { if (it.z[i] < lo) lo = it.z[i]; if (it.z[i] > hi) hi = it.z[i]; }
     const img = zToImage(it.z, it.nx, it.ny, lo, hi);
-    drawImageData(ctx, img, cx + 4, cy + 26, side, side);
+    drawImageData(ctx, img, cx + 4, cy + 30, side, side);
 
     ctx.strokeStyle = '#888'; ctx.lineWidth = 0.5;
-    ctx.strokeRect(cx + 4.5, cy + 26.5, side - 1, side - 1);
+    ctx.strokeRect(cx + 4.5, cy + 30.5, side - 1, side - 1);
 
-    drawColorbar(ctx, cx + side + 12, cy + 26, 10, side, lo * 1e9, hi * 1e9, '');
+    drawColorbar(ctx, cx + side + 14, cy + 30, 12, side, lo * 1e9, hi * 1e9, '');
 
     ctx.fillStyle = '#111'; ctx.font = FONT_S; ctx.textAlign = 'left';
-    ctx.fillText(it.name, cx + 4, cy + 14);
+    ctx.fillText(it.name, cx + 4, cy + 16);
 
-    // Ra 左上 / scalebar 右下
+    // Ra 左上 / scalebar 右下（每格按自己的扫描范围定长度）
+    const sb = it.barUm > 0 ? it.barUm : autoBar(it.scanUm);
     ctx.font = FONT_S; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-    const txt = `Ra ${it.rs.Ra.toFixed(2)} nm · 颗粒 ${it.particles ? it.particles.length : 0}`;
+    const nFeat = it.isGrain
+      ? `晶粒 ${it.grain && it.grain.stat ? it.grain.stat.n : 0}`
+      : `颗粒 ${it.particles ? it.particles.length : 0}`;
+    const txt = `Ra ${it.rs.Ra.toFixed(2)} nm · ${nFeat}`;
     ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.7)';
-    ctx.strokeText(txt, cx + 10, cy + 32);
+    ctx.strokeText(txt, cx + 10, cy + 38);
     ctx.fillStyle = '#fff';
-    ctx.fillText(txt, cx + 10, cy + 32);
+    ctx.fillText(txt, cx + 10, cy + 38);
     ctx.textBaseline = 'middle';
 
-    const barPx = side / it.scanUm;
-    const bx = cx + 4 + side - barPx - 8, by = cy + 26 + side - 12;
+    const barPx = (sb / it.scanUm) * side;
+    const bx = cx + 4 + side - barPx - 10, by = cy + 30 + side - 14;
     ctx.strokeStyle = 'rgba(0,0,0,.7)'; ctx.lineWidth = 5;
     ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx + barPx, by); ctx.stroke();
     ctx.strokeStyle = '#fff'; ctx.lineWidth = 3;
     ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx + barPx, by); ctx.stroke();
     ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
     ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.7)';
-    ctx.strokeText('1 µm', bx + barPx / 2, by - 3);
+    const sbTxt = fmtLen(sb);
+    const tw = ctx.measureText(sbTxt).width;
+    // 短 bar 时文字比 bar 宽，需夹在面板内
+    let tx = bx + barPx / 2;
+    tx = Math.min(tx, cx + 4 + side - 8 - tw / 2);
+    tx = Math.max(tx, cx + 4 + 8 + tw / 2);
+    ctx.strokeText(sbTxt, tx, by - 4);
     ctx.fillStyle = '#fff';
-    ctx.fillText('1 µm', bx + barPx / 2, by - 3);
+    ctx.fillText(sbTxt, tx, by - 4);
     ctx.textBaseline = 'middle';
   });
 
   ctx.fillStyle = '#111'; ctx.font = FONT_T; ctx.textAlign = 'center';
-  ctx.fillText('AFM 高度图总览（Gwyddion 色标 · 每格色标独立 · scale bar = 1 µm）', W / 2, 18);
+  ctx.fillText('AFM 高度图总览（Gwyddion 色标 · 每格色标与 scale bar 均按自身扫描范围独立标定）', W / 2, 24);
+  return canvas;
+}
+
+
+/* ============================================================
+ * xrd-core.js — XRD（摇摆曲线 / 2θ-ω）数值核心，纯 JS 无依赖
+ *   1. .xrdml / .txt(.xy) 解析
+ *   2. ALS 非对称最小二乘背景扣除（五对角带状 Cholesky，与 scipy 同解）
+ *   3. Savitzky-Golay 平滑（三次多项式，边界按 scipy 'interp' 处理）
+ *   4. 寻峰（高度 / 突出度 / 最小间距，逻辑对齐 scipy.signal.find_peaks）
+ *   5. 直接半高法
+ *   6. Voigt / Lorentzian / Gaussian 拟合（Levenberg-Marquardt + 参数界限）
+ *      Voigt 用 Weideman(1994) 复误差函数，相对误差 ~1e-14
+ * ============================================================ */
+
+/* ---------------- Weideman 复误差函数 ---------------- */
+const WEID_L = 5.0453784915222872;
+const WEID_A = [
+  5.3527205815899017e-14, -8.0608407680241953e-14, -3.2407405872466536e-13,
+  4.4298431146277343e-13, 2.0979473041617125e-12, -2.1171930132538046e-12,
+  -1.4312633734863994e-11, 6.3462586086969306e-12, 9.9393270271354835e-11,
+  3.197205122928734e-11, -6.6348466946967299e-10, -9.092238219880815e-10,
+  3.773443101018648e-09, 1.1883887259622093e-08, -1.0962277873591792e-08,
+  -1.1303157196228803e-07, -1.2894842921524573e-07, 6.7416556631756617e-07,
+  2.7654086656522236e-06, 1.4187058479367888e-06, -2.1741186565494455e-05,
+  -8.8177971418529959e-05, -0.00011396630644460048, 0.00046290316939987284,
+  0.0035484447086996506, 0.013898253763251366, 0.041051043016576819,
+  0.10084293371847948, 0.2150163632010739, 0.40734241895033407,
+  0.6956621918971001, 1.0813580371765887, 1.5401625788153652,
+  2.0193976436113505, 2.4453784928519209, 2.7407450274098601
+];
+
+/* w(z) = exp(-z^2) erfc(-i z)，返回实部（调用方只需要实部） */
+function faddeevaRe(zr, zi) {
+  // Z = (L + i z) / (L - i z)
+  const nr = WEID_L - zi, ni = zr;          // L + i z
+  const dr = WEID_L + zi, di = -zr;         // L - i z
+  const den = dr * dr + di * di;
+  const Zr = (nr * dr + ni * di) / den;
+  const Zi = (ni * dr - nr * di) / den;
+
+  // p = a0 Z^n + ... + a_{n-1}
+  let pr = WEID_A[0], pi = 0;
+  for (let k = 1; k < WEID_A.length; k++) {
+    const t = pr * Zr - pi * Zi + WEID_A[k];
+    pi = pr * Zi + pi * Zr;
+    pr = t;
+  }
+  // w = 2p/(L - iz)^2 + 1/(sqrt(pi)(L - iz))
+  const vr = dr, vi = di;                   // (L - i z)
+  const sr = vr * vr - vi * vi;             // (L - i z)^2
+  const si = 2 * vr * vi;
+  const sden = sr * sr + si * si;
+  const t1r = 2 * (pr * sr + pi * si) / sden;
+  const ur = dr / den, ui = -di / den;      // 1/(L - i z)
+  const c = 1 / Math.sqrt(Math.PI);
+  return t1r + c * ur;
+}
+
+/* Voigt 线型，峰值未归一（与 scipy.special.voigt_profile 一致） */
+function voigtProfile(dx, sigma, gamma) {
+  const s = Math.max(sigma, 1e-12);
+  const g = Math.max(gamma, 1e-12);
+  const root2 = Math.SQRT2;
+  const re = faddeevaRe(dx / (s * root2), g / (s * root2));
+  return re / (s * Math.sqrt(2 * Math.PI));
+}
+
+/* ---------------- 解析 ---------------- */
+function parseXRDTxt(text, fileName) {
+  const xs = [], ys = [];
+  const lines = text.split(/\r?\n/);
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line || /^[#%;/]/.test(line)) continue;
+    const parts = line.replace(/,/g, ' ').replace(/\t/g, ' ').split(/\s+/).filter(Boolean);
+    if (parts.length < 2) continue;
+    const a = parseFloat(parts[0]), b = parseFloat(parts[1]);
+    if (Number.isFinite(a) && Number.isFinite(b)) { xs.push(a); ys.push(b); }
+  }
+  if (xs.length < 5) throw new Error(`有效数据点不足（${xs.length} 个）`);
+  // 按角度排序
+  const idx = xs.map((v, i) => i).sort((i, j) => xs[i] - xs[j]);
+  return {
+    x: Float64Array.from(idx.map((i) => xs[i])),
+    y: Float64Array.from(idx.map((i) => ys[i])),
+    axis: '2Theta', file: fileName
+  };
+}
+
+function parseXRDML(text, fileName) {
+  const doc = new DOMParser().parseFromString(text, 'text/xml');
+  const parseErr = doc.getElementsByTagName('parsererror');
+  if (parseErr && parseErr.length) throw new Error('XML 解析失败');
+  const local = (el) => (el.localName || el.nodeName).replace(/^.*:/, '');
+
+  let scan = null;
+  const all = doc.getElementsByTagName('*');
+  for (let i = 0; i < all.length; i++) {
+    if (local(all[i]) === 'scan') { scan = all[i]; break; }
+  }
+  if (!scan) throw new Error('未找到 <scan> 节点');
+
+  let dp = null;
+  for (let i = 0; i < scan.getElementsByTagName('*').length; i++) {
+    const el = scan.getElementsByTagName('*')[i];
+    if (local(el) === 'dataPoints') { dp = el; break; }
+  }
+  if (!dp) throw new Error('未找到 <dataPoints> 节点');
+
+  let countsText = null;
+  const kids = dp.getElementsByTagName('*');
+  for (let i = 0; i < kids.length; i++) {
+    if (local(kids[i]) === 'counts' && kids[i].textContent.trim()) {
+      countsText = kids[i].textContent;
+      break;
+    }
+  }
+  if (!countsText) throw new Error('未找到 <counts> 数据');
+  const y = Float64Array.from(countsText.trim().split(/\s+/).map(Number).filter(Number.isFinite));
+  if (!y.length) throw new Error('<counts> 为空');
+
+  const scanAxis = scan.getAttribute('scanAxis') || '';
+  const positions = {};
+  for (let i = 0; i < dp.children.length; i++) {
+    const pos = dp.children[i];
+    if (local(pos) !== 'positions') continue;
+    const axis = pos.getAttribute('axis') || '';
+    let s = null, e = null;
+    for (let j = 0; j < pos.children.length; j++) {
+      const c = pos.children[j];
+      const t = local(c);
+      if (t === 'startPosition') s = parseFloat(c.textContent);
+      if (t === 'endPosition') e = parseFloat(c.textContent);
+    }
+    if (Number.isFinite(s) && Number.isFinite(e)) positions[axis] = [s, e];
+  }
+
+  let chosen = null;
+  if (positions[scanAxis]) chosen = [scanAxis, positions[scanAxis]];
+  if (!chosen) {
+    for (const key of Object.keys(positions)) {
+      if (/^(2theta|theta|omega|2th|angle)$/i.test(key)) { chosen = [key, positions[key]]; break; }
+    }
+  }
+  if (!chosen) {
+    const k = Object.keys(positions)[0];
+    if (k) chosen = [k, positions[k]];
+  }
+  if (!chosen) throw new Error('无法确定角度范围（positions 缺 start/end）');
+
+  const [axis, [a0, a1]] = chosen;
+  const n = y.length;
+  const x = new Float64Array(n);
+  for (let i = 0; i < n; i++) x[i] = a0 + (a1 - a0) * i / (n - 1);
+  return { x, y, axis, scanAxis, file: fileName };
+}
+
+/* ---------------- 扫描类型判断 ----------------
+ * 优先级：xrdml 的 scanAxis → 文件名关键词 → 角度跨度。
+ * 返回 {mode:'omega'|'2theta'|null, why}
+ */
+const XRD_NAME_2THETA = ['2theta', '2th', '2θ', 'theta2theta', 'theta-2theta'];
+const XRD_NAME_OMEGA = ['omega', 'rocking', 'rock', 'ω'];
+
+function guessScanMode(fileName, parsed) {
+  const name = (fileName || '').toLowerCase();
+  const ax = ((parsed && parsed.scanAxis) || '').replace(/\s+/g, '').toLowerCase();
+  if (ax) {
+    // 必须先判 2theta：scanAxis 为 "2Theta-Omega" 时同时含 omega，但它显然是 2θ 扫描
+    if (ax.includes('2theta') || ax.includes('2θ') || ax.includes('theta/2theta'))
+      return { mode: '2theta', why: 'xrdml scanAxis=' + parsed.scanAxis };
+    if (ax.includes('omega')) return { mode: 'omega', why: 'xrdml scanAxis=' + parsed.scanAxis };
+  }
+  for (const k of XRD_NAME_2THETA) if (name.includes(k)) return { mode: '2theta', why: '文件名含 ' + k };
+  for (const k of XRD_NAME_OMEGA) if (name.includes(k)) return { mode: 'omega', why: '文件名含 ' + k };
+  if (parsed && parsed.x && parsed.x.length > 1) {
+    const span = parsed.x[parsed.x.length - 1] - parsed.x[0];
+    if (span >= 5) return { mode: '2theta', why: `角度跨度 ${span.toFixed(1)}°（>5°）` };
+    if (span <= 1.5) return { mode: 'omega', why: `角度跨度 ${span.toFixed(2)}°（<1.5°）` };
+  }
+  return { mode: null, why: '无法判断' };
+}
+
+/* ---------------- 2θ 寻峰（不拟合） ---------------- */
+function findPeaks2Theta(x, yc, yReport, relHeight = 0.03, relProm = 0.02, maxPeaks = 40) {
+  const n = yc.length;
+  let win = Math.max(5, Math.floor(0.01 * n));
+  if (win % 2 === 0) win += 1;
+  const ys = savgolFilter(yc, win, 3);
+  let vmax = -Infinity;
+  for (let i = 0; i < n; i++) if (ys[i] > vmax) vmax = ys[i];
+  if (!(vmax > 0)) return [];
+  const peaks = findPeaks(ys, {
+    height: vmax * relHeight,
+    prominence: vmax * relProm,
+    distance: Math.max(1, Math.floor(0.002 * n))
+  });
+  const rep = yReport || ys;
+  let ymax = -Infinity;
+  for (let i = 0; i < rep.length; i++) if (rep[i] > ymax) ymax = rep[i];
+  const out = peaks.map((p) => ({
+    x: x[p.index], y: rep[p.index],
+    rel: ymax > 0 ? rep[p.index] / ymax : 0
+  }));
+  out.sort((a, b) => b.rel - a.rel);
+  return out.slice(0, maxPeaks).sort((a, b) => a.x - b.x);
+}
+
+/* ---------------- ALS 背景 ---------------- */
+function alsBaseline(y, lam = 1e7, p = 0.01, niter = 10) {
+  const n = y.length;
+  if (n < 5) return new Float64Array(n);
+  const diag = new Float64Array(n).fill(6);
+  diag[0] = 1; diag[1] = 5; diag[n - 2] = 5; diag[n - 1] = 1;
+
+  const l0 = new Float64Array(n), l1 = new Float64Array(n), l2 = new Float64Array(n);
+  const w = new Float64Array(n).fill(1);
+  const z = new Float64Array(n);
+  const tmp = new Float64Array(n);
+
+  for (let it = 0; it < niter; it++) {
+    // A = diag(w) + lam * B，B = D·Dᵀ 为五对角
+    // 行内顺序必须是 L[i][i-2] → L[i][i-1] → L[i][i]
+    for (let i = 0; i < n; i++) {
+      const a0 = w[i] + lam * diag[i];
+      const a1 = i >= 1 ? lam * ((i === 1 || i === n - 1) ? -2 : -4) : 0;
+      const a2 = i >= 2 ? lam : 0;
+      if (i >= 2) l2[i] = a2 / l0[i - 2];
+      if (i >= 1) l1[i] = (a1 - (i >= 2 ? l2[i] * l1[i - 1] : 0)) / l0[i - 1];
+      const s = a0 - (i >= 1 ? l1[i] * l1[i] : 0) - (i >= 2 ? l2[i] * l2[i] : 0);
+      l0[i] = Math.sqrt(Math.max(s, 1e-300));
+    }
+    // L z = w*y
+    for (let i = 0; i < n; i++) {
+      let b = w[i] * y[i];
+      if (i >= 1) b -= l1[i] * z[i - 1];
+      if (i >= 2) b -= l2[i] * z[i - 2];
+      z[i] = b / l0[i];
+    }
+    // Lt x = z
+    for (let i = n - 1; i >= 0; i--) {
+      let b = z[i];
+      if (i + 1 < n) b -= l1[i + 1] * tmp[i + 1];
+      if (i + 2 < n) b -= l2[i + 2] * tmp[i + 2];
+      tmp[i] = b / l0[i];
+    }
+    for (let i = 0; i < n; i++) {
+      z[i] = tmp[i];
+      w[i] = y[i] > z[i] ? p : (y[i] < z[i] ? 1 - p : 0.5);
+    }
+  }
+  return z.slice();
+}
+
+/* ---------------- 小工具：线性方程组 ---------------- */
+function solveSmall(A, b) {
+  // 高斯消元（带部分主元），A 为 n×n 数组的数组
+  const n = b.length;
+  const M = A.map((row, i) => row.slice().concat([b[i]]));
+  for (let col = 0; col < n; col++) {
+    let piv = col;
+    for (let r = col + 1; r < n; r++) if (Math.abs(M[r][col]) > Math.abs(M[piv][col])) piv = r;
+    if (Math.abs(M[piv][col]) < 1e-300) return null;
+    if (piv !== col) { const t = M[piv]; M[piv] = M[col]; M[col] = t; }
+    const d = M[col][col];
+    for (let c = col; c <= n; c++) M[col][c] /= d;
+    for (let r = 0; r < n; r++) {
+      if (r === col) continue;
+      const f = M[r][col];
+      if (!f) continue;
+      for (let c = col; c <= n; c++) M[r][c] -= f * M[col][c];
+    }
+  }
+  return M.map((row) => row[n]);
+}
+
+/* ---------------- Savitzky-Golay ---------------- */
+function savgolWeights(win, order, evalPos) {
+  // 以窗口中心为原点构造 Vandermonde；权重 w_j 满足 sum(w_j*y_j) = 拟合多项式在 evalPos 处的值
+  const half = (win - 1) / 2;
+  const m = order + 1;
+  const A = [];
+  for (let j = 0; j < win; j++) {
+    const t = j - half;
+    const row = new Array(m);
+    for (let k = 0; k < m; k++) row[k] = Math.pow(t, k);
+    A.push(row);
+  }
+  const AtA = [];
+  for (let i = 0; i < m; i++) {
+    AtA.push(new Array(m).fill(0));
+    for (let j = 0; j < m; j++) {
+      let s = 0;
+      for (let r = 0; r < win; r++) s += A[r][i] * A[r][j];
+      AtA[i][j] = s;
+    }
+  }
+  const t0 = evalPos - half;
+  const v = new Array(m);
+  for (let k = 0; k < m; k++) v[k] = Math.pow(t0, k);
+  const c = solveSmall(AtA, v);
+  if (!c) return null;
+  const w = new Float64Array(win);
+  for (let j = 0; j < win; j++) {
+    let s = 0;
+    for (let k = 0; k < m; k++) s += A[j][k] * c[k];
+    w[j] = s;
+  }
+  return w;
+}
+
+function savgolFilter(y, win, order = 3) {
+  const n = y.length;
+  if (win % 2 === 0) win += 1;
+  win = Math.min(win, n % 2 ? n : n - 1);
+  if (win < 5) win = 5;
+  if (win > n) win = n % 2 ? n : n - 1;
+  const half = (win - 1) / 2;
+  const out = new Float64Array(n);
+  const cache = new Map();
+  const getW = (pos) => {
+    const key = pos;
+    if (!cache.has(key)) cache.set(key, savgolWeights(win, order, pos));
+    return cache.get(key);
+  };
+  for (let i = 0; i < n; i++) {
+    let start, evalPos;
+    if (i < half) { start = 0; evalPos = i; }
+    else if (i >= n - half) { start = n - win; evalPos = i - start; }
+    else { start = i - half; evalPos = half; }
+    const w = getW(evalPos);
+    let s = 0;
+    if (w) {
+      for (let j = 0; j < win; j++) s += w[j] * y[start + j];
+    } else {
+      for (let j = 0; j < win; j++) s += y[start + j] / win;
+    }
+    out[i] = s;
+  }
+  return out;
+}
+
+/* ---------------- 寻峰 ---------------- */
+function findPeaks(y, opt = {}) {
+  const n = y.length;
+  const height = opt.height == null ? -Infinity : opt.height;
+  const promMin = opt.prominence == null ? 0 : opt.prominence;
+  const distance = Math.max(1, opt.distance || 1);
+
+  const cand = [];
+  for (let i = 1; i < n - 1; i++) {
+    if (y[i] > y[i - 1] && y[i] >= y[i + 1] && y[i] >= height) cand.push(i);
+  }
+  // 突出度
+  const info = [];
+  for (const i of cand) {
+    let minL = y[i];
+    for (let j = i - 1; j >= 0; j--) {
+      if (y[j] > y[i]) break;
+      if (y[j] < minL) minL = y[j];
+    }
+    let minR = y[i];
+    for (let j = i + 1; j < n; j++) {
+      if (y[j] > y[i]) break;
+      if (y[j] < minR) minR = y[j];
+    }
+    const prom = y[i] - Math.max(minL, minR);
+    if (prom >= promMin) info.push({ index: i, value: y[i], prominence: prom });
+  }
+  // 最小间距：先保高峰
+  info.sort((a, b) => b.value - a.value);
+  const kept = [];
+  for (const p of info) {
+    let ok = true;
+    for (const q of kept) if (Math.abs(p.index - q.index) < distance) { ok = false; break; }
+    if (ok) kept.push(p);
+  }
+  kept.sort((a, b) => a.index - b.index);
+  return kept;
+}
+
+/* ---------------- 直接半高法 ---------------- */
+function fwhmDirect(x, y, idx) {
+  const peak = y[idx];
+  const half = peak / 2;
+  let left = idx;
+  while (left > 0 && y[left] > half) left--;
+  let xLeft;
+  if (left < idx) {
+    const t = (half - y[left]) / (y[left + 1] - y[left] || 1e-30);
+    xLeft = x[left] + t * (x[left + 1] - x[left]);
+  } else xLeft = x[0];
+
+  let right = idx;
+  while (right < y.length - 1 && y[right] > half) right++;
+  let xRight;
+  if (right > idx && right < y.length) {
+    const t = (half - y[right - 1]) / (y[right] - y[right - 1] || 1e-30);
+    xRight = x[right - 1] + t * (x[right] - x[right - 1]);
+  } else xRight = x[y.length - 1];
+
+  return { fwhm: Math.abs(xRight - xLeft), xLeft, xRight, height: peak, center: x[idx] };
+}
+
+/* ---------------- 模型 ---------------- */
+function lorentzian(dx, gamma, A) {
+  const g = Math.max(Math.abs(gamma), 1e-12);
+  return A * (0.5 * g) * (0.5 * g) / (dx * dx + 0.25 * g * g);
+}
+function gaussian(dx, sigma, A) {
+  const s = Math.max(Math.abs(sigma), 1e-12);
+  return A * Math.exp(-dx * dx / (2 * s * s));
+}
+
+/* 参数顺序：Voigt [x0, sigma, gamma, A]；Lorentz [x0, gamma, A]；Gauss [x0, sigma, A] */
+function modelValue(type, p, dx) {
+  if (type === 'Voigt') return p[3] * voigtProfile(dx, p[1], p[2]);
+  if (type === 'Lorentzian') return lorentzian(dx, p[1], p[2]);
+  return gaussian(dx, p[1], p[2]);
+}
+
+function fwhmOf(type, p) {
+  if (type === 'Voigt') {
+    const gamma = Math.abs(p[2]), sigma = Math.abs(p[1]);
+    const fg = 2 * gamma, fs = 2.3548 * sigma;
+    return 0.5346 * fg + Math.sqrt(0.2166 * fg * fg + fs * fs);
+  }
+  if (type === 'Lorentzian') return Math.abs(p[1]);
+  return 2 * Math.sqrt(2 * Math.log(2)) * Math.abs(p[1]);
+}
+
+/* ---------------- Levenberg-Marquardt（带盒约束） ---------------- */
+function lmFit(type, x, y, p0, lower, upper, maxIter = 200) {
+  const n = x.length;
+  const m = p0.length;
+  const clamp = (p) => p.map((v, i) => Math.min(upper[i], Math.max(lower[i], v)));
+  const resid = (p) => {
+    const r = new Float64Array(n);
+    for (let i = 0; i < n; i++) r[i] = modelValue(type, p, x[i] - p[0]) - y[i];
+    return r;
+  };
+  const sse = (r) => { let s = 0; for (let i = 0; i < n; i++) s += r[i] * r[i]; return s; };
+
+  let p = clamp(p0.slice());
+  let r = resid(p);
+  let err = sse(r);
+  let lambda = 1e-3;
+
+  for (let iter = 0; iter < maxIter; iter++) {
+    // 数值雅可比
+    const J = [];
+    for (let k = 0; k < m; k++) J.push(new Float64Array(n));
+    for (let k = 0; k < m; k++) {
+      // 相对步长不能太小：数据量级 ~1e3 时 1e-6 的扰动会被舍入吃掉
+      const h = Math.max(1e-6, Math.abs(p[k]) * 1e-3);
+      const pp = p.slice(); pp[k] += h;
+      const rp = resid(clamp(pp));
+      for (let i = 0; i < n; i++) J[k][i] = (rp[i] - r[i]) / h;
+    }
+    // 法方程 JtJ d = -Jt r
+    const JtJ = [];
+    const Jtr = new Array(m).fill(0);
+    for (let a = 0; a < m; a++) {
+      JtJ.push(new Array(m).fill(0));
+      for (let b = 0; b < m; b++) {
+        let s = 0;
+        for (let i = 0; i < n; i++) s += J[a][i] * J[b][i];
+        JtJ[a][b] = s;
+      }
+      let s = 0;
+      for (let i = 0; i < n; i++) s += J[a][i] * r[i];
+      Jtr[a] = s;
+    }
+    let improved = false;
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const A = JtJ.map((row, a) => row.map((v, b) => (a === b ? v * (1 + lambda) + 1e-12 : v)));
+      const d = solveSmall(A, Jtr.map((v) => -v));
+      if (!d) { lambda *= 10; continue; }
+      const pn = clamp(p.map((v, i) => v + d[i]));
+      const rn = resid(pn);
+      const en = sse(rn);
+      if (en < err) {
+        p = pn; r = rn; err = en; lambda = Math.max(1e-9, lambda / 3);
+        improved = true;
+        break;
+      }
+      lambda *= 8;
+    }
+    if (!improved) break;
+  }
+  // R²
+  let mean = 0;
+  for (let i = 0; i < n; i++) mean += y[i];
+  mean /= n;
+  let ssTot = 0;
+  for (let i = 0; i < n; i++) ssTot += (y[i] - mean) * (y[i] - mean);
+  const r2 = ssTot > 0 ? 1 - err / ssTot : 0;
+  return { p, r2, sse: err };
+}
+
+function fitPeak(type, x, y, idx, opt = {}) {
+  const span = x[x.length - 1] - x[0];
+  const dx = x[1] - x[0];
+  const x0g = x[idx];
+  const window = opt.window || 'local';
+  const fwHint = opt.fwHint;
+
+  let maskStart = 0, maskEnd = x.length - 1, tag;
+  if (window === 'full') {
+    tag = '全谱（原口径）';
+  } else {
+    const fw0 = fwHint && fwHint > 0 ? fwHint : 0.01 * span;
+    const half = Math.max(8 * fw0, 20 * dx);
+    while (maskStart < x.length && x[maskStart] < x0g - half) maskStart++;
+    while (maskEnd >= 0 && x[maskEnd] > x0g + half) maskEnd--;
+    tag = `局部窗口 ±${half.toFixed(3)}°`;
+  }
+  const nW = maskEnd - maskStart + 1;
+  if (nW < 12) return { ok: false, why: '窗口内点数不足' };
+  const xs = x.slice(maskStart, maskEnd + 1);
+  const ysRaw = y.slice(maskStart, maskEnd + 1);
+
+  // 强度归一化：量级 1e0~1e5 都能用同一套步长/界限
+  let ymax = 0;
+  for (let i = 0; i < ysRaw.length; i++) if (ysRaw[i] > ymax) ymax = ysRaw[i];
+  if (!(ymax > 0)) return { ok: false, why: '窗口内强度全为零' };
+  const ys = Float64Array.from(ysRaw, (v) => v / ymax);
+
+  const fw0 = fwHint && fwHint > 0 ? fwHint : 0.01 * span;
+  const s0 = Math.max(0.4 * fw0, 5 * dx);
+
+  let p0, lower, upper;
+  if (type === 'Voigt') {
+    p0 = [x0g, s0, s0, 1];
+    if (window === 'full') {
+      lower = [x0g - 0.05 * span, 1e-4 * span, 1e-4 * span, 0.1];
+      upper = [x0g + 0.05 * span, 0.1 * span, 0.1 * span, 2];
+    } else {
+      lower = [x0g - 0.05 * span, 1e-5, 1e-5, 1e-6];
+      upper = [x0g + 0.05 * span, 0.5, 0.5, 50];
+    }
+  } else {
+    p0 = [x0g, s0, 1];
+    if (window === 'full') {
+      lower = [x0g - 0.05 * span, 1e-4 * span, 0.1];
+      upper = [x0g + 0.05 * span, 0.1 * span, 2];
+    } else {
+      lower = [x0g - 0.05 * span, 1e-5, 1e-6];
+      upper = [x0g + 0.05 * span, 0.5, 50];
+    }
+  }
+
+  const res = lmFit(type, xs, ys, p0, lower, upper, 400);
+  const fwhm = fwhmOf(type, res.p);
+  if (!(fwhm > 0 && fwhm < 0.5 * span)) {
+    return { ok: false, why: 'FWHM 不合理' };
+  }
+  const pOut = res.p.slice();
+  const ai = type === 'Voigt' ? 3 : 2;
+  pOut[ai] = res.p[ai] * ymax;
+  return {
+    ok: true, type, fwhm, center: res.p[0], amp: pOut[ai],
+    params: pOut, r2: res.r2, window: tag,
+    xs, ys: ysRaw, model: (xx) => modelValue(type, pOut, xx - pOut[0])
+  };
+}
+
+/* ---------------- 单条曲线全流程 ---------------- */
+function analyzeXRDCurve(x, y, opt = {}) {
+  // 2θ-θ 扫描：只找峰、不出 FWHM，纵轴用 log（绘图时处理）
+  if (opt.mode === '2theta') {
+    let yc = y;
+    try {
+      const bg = alsBaseline(y, 1e7, 0.01, 10);
+      yc = Float64Array.from(y, (v, i) => v - bg[i]);
+    } catch (e) { /* 兜底用原始数据判峰 */ }
+    const peaks = findPeaks2Theta(x, yc, y);
+    let peakX = 0;
+    for (const p of peaks) if (p.rel > (peaks.find((q) => q.x === peakX) || { rel: -1 }).rel) peakX = p.x;
+    return {
+      mode: '2theta', peaks, nPeaks: peaks.length, peakX,
+      peakList: peaks.map((p) => p.x.toFixed(2)).join(', '),
+      bgApplied: false, bg: new Float64Array(y.length), yc: y,
+      fits: {}, method: '2θ 峰位（不拟合）',
+      fwhmDirect: null, xLeft: null, xRight: null
+    };
+  }
+  const bgOn = opt.background !== false;
+  const fitType = opt.fit || 'Voigt';
+  const window = opt.window || 'local';
+
+  let bg = new Float64Array(y.length);
+  let yc = Float64Array.from(y);
+  let bgApplied = false;
+  if (bgOn) {
+    try { bg = alsBaseline(y, 1e7, 0.01, 10); bgApplied = true; }
+    catch (e) { bgApplied = false; }
+    if (bgApplied) for (let i = 0; i < y.length; i++) yc[i] = y[i] - bg[i];
+  }
+
+  const n = yc.length;
+  let win = Math.max(5, Math.floor(0.01 * n));
+  if (win % 2 === 0) win += 1;
+  const ys = savgolFilter(yc, win, 3);
+  let vmax = -Infinity;
+  for (let i = 0; i < ys.length; i++) if (ys[i] > vmax) vmax = ys[i];
+  const peaks = findPeaks(ys, {
+    height: vmax * 0.05,
+    prominence: vmax * 0.02,
+    distance: Math.max(1, Math.floor(0.005 * n))
+  });
+  let idx;
+  if (!peaks.length) {
+    idx = 0;
+    for (let i = 0; i < ys.length; i++) if (ys[i] > ys[idx]) idx = i;
+  } else {
+    let best = peaks[0];
+    for (const p of peaks) if (p.prominence > best.prominence) best = p;
+    idx = best.index;
+  }
+
+  const direct = fwhmDirect(x, yc, idx);
+  const out = {
+    mode: 'omega',
+    index: idx, peakX: direct.center, peakY: direct.height,
+    fwhmDirect: direct.fwhm, xLeft: direct.xLeft, xRight: direct.xRight,
+    bgApplied, bg, yc, ys, peaks: peaks.length,
+    fits: {}, method: 'Direct'
+  };
+
+  const types = fitType === 'All' ? ['Voigt', 'Lorentzian', 'Gaussian']
+    : (fitType === 'None' ? [] : [fitType]);
+  for (const t of types) {
+    const f = fitPeak(t, x, yc, idx, { window, fwHint: direct.fwhm });
+    if (f.ok) out.fits[t] = f;
+  }
+  out.method = types.length
+    ? (Object.keys(out.fits).length ? (fitType === 'All' ? 'All' : `${fitType} fitting`)
+      : `${fitType} 拟合失败`)
+    : 'Direct';
+  return out;
+}
+
+
+/* ============================================================
+ * xrd-draw.js — XRD 拟合图（Canvas）
+ *   主图：原始 / 背景 / 扣背景 / 各拟合曲线 + 半高线 + FWHM 标注
+ *   副图：残差（可选）
+ * 字体沿用 draw.js 里的 FONT / FONT_S / FONT_T
+ * ============================================================ */
+
+function _xrdRange(arr) {
+  let lo = Infinity, hi = -Infinity;
+  for (let i = 0; i < arr.length; i++) {
+    if (arr[i] < lo) lo = arr[i];
+    if (arr[i] > hi) hi = arr[i];
+  }
+  return [lo, hi];
+}
+
+function _niceTicks(lo, hi, n) {
+  if (!(hi > lo)) return [lo];
+  const span = hi - lo;
+  const raw = span / n;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const norm = raw / mag;
+  const step = (norm >= 5 ? 5 : norm >= 2 ? 2 : 1) * mag;
+  const out = [];
+  let v = Math.ceil(lo / step) * step;
+  for (; v <= hi + step * 1e-6; v += step) out.push(Math.abs(v) < step * 1e-9 ? 0 : v);
+  return out;
+}
+
+function _fmtTick(v, step) {
+  if (Math.abs(v) >= 1e4) return (v / 1e3).toFixed(0) + 'k';
+  const dec = step >= 1 ? 0 : step >= 0.1 ? 1 : step >= 0.01 ? 2 : 3;
+  return v.toFixed(dec);
+}
+
+const XRD_FIT_COLORS = { Voigt: '#d02020', Lorentzian: '#0a8f3c', Gaussian: '#1857c4' };
+
+/* 画一条曲线（数据量大时按像素列抽样，避免百万级线段） */
+function _plotLine(ctx, xs, ys, mapX, mapY, color, width, alpha, dash) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  ctx.globalAlpha = alpha == null ? 1 : alpha;
+  if (dash) ctx.setLineDash(dash);
+  const n = xs.length;
+  let lastPx = -1e9;
+  let pen = false;
+  for (let i = 0; i < n; i++) {
+    const py0 = ys[i];
+    if (!Number.isFinite(py0)) { pen = false; continue; }
+    const px = mapX(xs[i]);
+    // 同一像素列只取首尾，减少路径点
+    if (i > 0 && i < n - 1 && Math.abs(px - lastPx) < 0.35) continue;
+    lastPx = px;
+    const py = mapY(py0);
+    if (!pen) { ctx.moveTo(px, py); pen = true; } else ctx.lineTo(px, py);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+/**
+ * 画一张 XRD 拟合图
+ * @param canvas 目标 canvas
+ * @param item   analyzeXRDCurve 的结果 + {name, x, y}
+ * @param opts   {W,H,residuals,title,legend}
+ */
+function drawXRDFit(canvas, item, opts = {}) {
+  const withRes = !!opts.residuals;
+  const W = opts.W || 980;
+  const H = opts.H || (withRes ? 830 : 600);
+  const ctx = setup(canvas, W, H);
+
+  const padL = 92, padR = 34, padT = 58;
+  const padB = 88;
+  const gap = withRes ? 92 : 0;
+  const mainH = withRes ? (H - padT - padB - gap) * 0.62 : H - padT - padB;
+
+  const x = item.x, y = item.y, n = x.length;
+  const [xlo, xhi] = [x[0], x[n - 1]];
+
+  // y 轴范围：原始数据（含背景）与拟合曲线一起考虑
+  let yHi = -Infinity, yLo = Infinity;
+  for (let i = 0; i < n; i++) {
+    if (y[i] > yHi) yHi = y[i];
+    if (y[i] < yLo) yLo = y[i];
+  }
+  // 拟合曲线可能略高于原始点，y 轴要把它也算进去，否则峰顶被截
+  for (const k of Object.keys(item.fits || {})) {
+    const f = item.fits[k];
+    const v = f.model(f.center);
+    if (v > yHi) yHi = v;
+  }
+  const logY = !!(opts.logY || item.mode === '2theta');
+  let yTickVals;
+
+  if (logY) {
+    let ymin = Infinity;
+    for (let i = 0; i < n; i++) if (y[i] > 0 && y[i] < ymin) ymin = y[i];
+    if (!isFinite(ymin)) ymin = 1;
+    const e0 = Math.floor(Math.log10(ymin));
+    const yTop = Math.pow(10, Math.log10(yHi) + 0.08);   // 顶部留 8% 给峰位文字
+    const e1 = Math.floor(Math.log10(yTop));
+    yLo = Math.pow(10, e0);
+    const denom = Math.log10(yTop) - Math.log10(yLo) || 1;
+    var logMapY = (v) => padT + mainH -
+      (Math.log10(Math.max(v, yLo)) - Math.log10(yLo)) / denom * mainH;
+    yTickVals = [];
+    const stepE = (e1 - e0) <= 6 ? 1 : Math.ceil((e1 - e0) / 6);
+    for (let e = e0; e <= e1; e += stepE) yTickVals.push(Math.pow(10, e));
+  } else {
+    yHi = yHi * 1.06;
+    yLo = Math.min(0, yLo);
+  }
+
+  const mapX = (v) => padL + (v - xlo) / (xhi - xlo || 1) * (W - padL - padR);
+  const mapY = logY ? logMapY
+    : (v) => padT + mainH - (v - yLo) / (yHi - yLo || 1) * mainH;
+
+  // 网格与坐标
+  ctx.strokeStyle = '#e8e2d9';
+  ctx.lineWidth = 1;
+  const xt = _niceTicks(xlo, xhi, 7);
+  const yt = logY ? yTickVals : _niceTicks(yLo, yHi, 6);
+  const xStep = xt.length > 1 ? xt[1] - xt[0] : 1;
+  const yStep = yt.length > 1 ? yt[1] - yt[0] : 1;
+  for (const v of xt) {
+    const px = mapX(v);
+    ctx.beginPath(); ctx.moveTo(px, padT); ctx.lineTo(px, padT + mainH); ctx.stroke();
+  }
+  for (const v of yt) {
+    const py = mapY(v);
+    ctx.beginPath(); ctx.moveTo(padL, py); ctx.lineTo(W - padR, py); ctx.stroke();
+  }
+  ctx.strokeStyle = '#555';
+  ctx.beginPath();
+  ctx.moveTo(padL, padT); ctx.lineTo(padL, padT + mainH);
+  ctx.lineTo(W - padR, padT + mainH); ctx.stroke();
+
+  ctx.fillStyle = '#222'; ctx.font = FONT_S;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  for (const v of xt) ctx.fillText(_fmtTick(v, xStep), mapX(v), padT + mainH + 8);
+  ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  for (const v of yt) ctx.fillText(_fmtTick(v, yStep), padL - 10, mapY(v));
+
+  ctx.fillStyle = '#222'; ctx.font = FONT;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  ctx.fillText(logY ? '2θ (°)' : 'ω (°)', padL + (W - padL - padR) / 2, padT + mainH + 36);
+  ctx.save();
+  ctx.translate(28, padT + mainH / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText('Intensity', 0, 0);
+  ctx.restore();
+
+  // 曲线
+  _plotLine(ctx, x, y, mapX, mapY, '#666666', 1.0, 0.45);
+  if (item.bgApplied) {
+    _plotLine(ctx, x, item.bg, mapX, mapY, '#1a9e4b', 1.4, 0.85);
+    _plotLine(ctx, x, item.yc, mapX, mapY, '#1f5fd0', 1.3, 0.9);
+  } else {
+    _plotLine(ctx, x, item.yc, mapX, mapY, '#1f5fd0', 1.3, 0.9);
+  }
+
+  // 拟合曲线（只画窗口内的点，避免窗口外乱延伸）
+  const fits = Object.keys(item.fits).map((k) => item.fits[k]);
+  for (const f of fits) {
+    const fy = new Float64Array(f.xs.length);
+    for (let i = 0; i < f.xs.length; i++) fy[i] = f.model(f.xs[i]);
+    _plotLine(ctx, f.xs, fy, mapX, mapY, XRD_FIT_COLORS[f.type] || '#d02020', 2.2, 0.95);
+  }
+
+  // 2θ-θ 扫描：直接标每个峰的峰位（不出 FWHM）
+  if (item.peaks && item.peaks.length) {
+    ctx.save();
+    ctx.font = FONT_S;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    for (const p of item.peaks) {
+      ctx.setLineDash([2, 4]);
+      ctx.strokeStyle = 'rgba(194,24,91,.45)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(mapX(p.x), padT + mainH);
+      ctx.lineTo(mapX(p.x), mapY(p.y));
+      ctx.stroke();
+      ctx.save();
+      ctx.setLineDash([]);
+      ctx.translate(mapX(p.x), mapY(p.y) - 5);
+      ctx.rotate(-Math.PI / 2);
+      const txt = p.x.toFixed(2) + '°';
+      ctx.lineWidth = 3.5;
+      ctx.strokeStyle = 'rgba(255,255,255,.92)';
+      ctx.strokeText(txt, 0, 0);
+      ctx.fillStyle = '#c2185b';
+      ctx.fillText(txt, 0, 0);
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
+  // 半高线与 FWHM 标注（半高按拟合曲线在峰位的实际高度算，不能用幅度参数 A/2）
+  const lead = fits.length ? fits[0] : null;
+  if (lead) {
+    const yPeakFit = lead.model(lead.center);
+    const yHalf = yPeakFit / 2;
+    ctx.save();
+    ctx.setLineDash([6, 5]);
+    ctx.strokeStyle = '#c2185b';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(padL, mapY(yHalf)); ctx.lineTo(W - padR, mapY(yHalf));
+    ctx.stroke();
+    ctx.restore();
+
+    for (const f of fits) {
+      const c = XRD_FIT_COLORS[f.type] || '#d02020';
+      ctx.save();
+      ctx.setLineDash([3, 3]);
+      ctx.strokeStyle = c;
+      ctx.lineWidth = 1.1;
+      const yTop = yHalf * 1.08;
+      for (const xv of [f.center - f.fwhm / 2, f.center + f.fwhm / 2]) {
+        ctx.beginPath();
+        ctx.moveTo(mapX(xv), mapY(0));
+        ctx.lineTo(mapX(xv), mapY(yTop));
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    // 标注放在峰右侧的空白处，用引出线指到半高交点
+    const label = `FWHM = ${lead.fwhm.toFixed(4)}°`;
+    const ax = padL + (W - padL - padR) * 0.52;
+    const ay = padT + mainH * 0.34;
+    const tx = mapX(lead.center + lead.fwhm / 2);
+    const ty = mapY(yHalf);
+    ctx.strokeStyle = 'rgba(194,24,91,.75)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(ax - 6, ay + 4);
+    ctx.lineTo(tx, ty);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(tx, ty, 3, 0, Math.PI * 2);
+    ctx.fillStyle = '#c2185b';
+    ctx.fill();
+
+    ctx.font = FONT_S;
+    ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    ctx.lineWidth = 3.5;
+    ctx.strokeStyle = 'rgba(255,255,255,.95)';
+    ctx.strokeText(label, ax - 10, ay);
+    ctx.fillStyle = '#c2185b';
+    ctx.fillText(label, ax - 10, ay);
+  }
+
+  // 图例
+  const rows = [['#666666', 'Raw data']];
+  if (!logY) {
+    if (item.bgApplied) {
+      rows.push(['#1a9e4b', 'Background']);
+      rows.push(['#1f5fd0', 'Background subtracted']);
+    } else {
+      rows.push(['#1f5fd0', 'Raw data (no bg sub)']);
+    }
+  }
+  for (const f of fits) {
+    rows.push([XRD_FIT_COLORS[f.type] || '#d02020',
+      `${f.type}  FWHM ${f.fwhm.toFixed(4)}  R² ${f.r2.toFixed(4)}`]);
+  }
+  const lh = 21, lw = 330;
+  const lx0 = W - padR - lw, ly0 = padT + 6;
+  ctx.fillStyle = 'rgba(255,255,255,.92)';
+  ctx.fillRect(lx0 - 8, ly0 - 6, lw, rows.length * lh + 10);
+  ctx.strokeStyle = '#d8d0c4';
+  ctx.strokeRect(lx0 - 8, ly0 - 6, lw, rows.length * lh + 10);
+  ctx.font = FONT_S; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  rows.forEach((r, i) => {
+    const yy = ly0 + i * lh + 6;
+    ctx.strokeStyle = r[0]; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(lx0, yy); ctx.lineTo(lx0 + 22, yy); ctx.stroke();
+    ctx.fillStyle = '#333'; ctx.fillText(r[1], lx0 + 30, yy);
+  });
+
+  // 标题
+  ctx.fillStyle = '#111'; ctx.font = FONT_T;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  ctx.fillText(opts.title || item.name, W / 2, 14);
+  if (opts.subtitle) {
+    ctx.fillStyle = '#555'; ctx.font = FONT_S;
+    ctx.fillText(opts.subtitle, W / 2, 38);
+  }
+
+  // 残差副图
+  if (withRes && lead) {
+    const rTop = padT + mainH + gap;
+    const rH = H - rTop - padB + 34;
+    let rAbs = 0;
+    const resid = new Float64Array(lead.xs.length);
+    for (let i = 0; i < lead.xs.length; i++) {
+      const v = lead.ys[i] - lead.model(lead.xs[i]);
+      resid[i] = v;
+      if (Math.abs(v) > rAbs) rAbs = Math.abs(v);
+    }
+    // 取整到 2 位有效数字，刻度好看一些
+    const mag = Math.pow(10, Math.floor(Math.log10(rAbs || 1)) - 1);
+    const rHi = Math.ceil((rAbs * 1.15 || 1) / mag) * mag;
+    const rMapY = (v) => rTop + rH / 2 - v / rHi * (rH / 2);
+
+    ctx.strokeStyle = '#e8e2d9';
+    ctx.beginPath(); ctx.moveTo(padL, rMapY(0)); ctx.lineTo(W - padR, rMapY(0)); ctx.stroke();
+    ctx.strokeStyle = '#555';
+    ctx.beginPath();
+    ctx.moveTo(padL, rTop); ctx.lineTo(padL, rTop + rH);
+    ctx.lineTo(W - padR, rTop + rH); ctx.stroke();
+
+    _plotLine(ctx, lead.xs, resid, mapX, rMapY, '#1857c4', 1.1, 0.9);
+    ctx.strokeStyle = '#d02020'; ctx.lineWidth = 1; ctx.globalAlpha = 0.6;
+    ctx.beginPath(); ctx.moveTo(padL, rMapY(0)); ctx.lineTo(W - padR, rMapY(0)); ctx.stroke();
+    ctx.globalAlpha = 1;
+
+    ctx.fillStyle = '#222'; ctx.font = FONT_S;
+    ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    for (const v of [rHi, 0, -rHi]) {
+      ctx.fillText(_fmtTick(v, Math.abs(rHi) / 2), padL - 10, rMapY(v));
+    }
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.fillText('Residuals', padL + 8, rTop + 4);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.fillStyle = '#222';
+    for (const v of xt) ctx.fillText(_fmtTick(v, xStep), mapX(v), rTop + rH + 8);
+    ctx.textBaseline = 'top';
+    ctx.fillText('ω (°)', padL + (W - padL - padR) / 2, rTop + rH + 30);
+  }
   return canvas;
 }
 
@@ -21270,21 +22741,53 @@ function toCSV(headers, rows) {
 
 /* ---------- CSV ---------- */
 function summaryCSV(items) {
-  const head = ['样品', '扫描范围 (µm)', 'Ra (nm)', 'Rq (nm)', 'Rmax (nm)', 'Rz (nm)',
-    'Ssk', 'Sku', '颗粒数', '面密度 (个/µm²)', '均径 (nm)', '中位径 (nm)', '最大径 (nm)',
-    '均高 (nm)', '最大高 (nm)', '覆盖率 (%)', '检测阈值 (nm)', '噪声 σ (nm)'];
+  const head = ['样品', '表面类型', '扫描范围 (µm)', 'Ra (nm)', 'Rq (nm)', 'Rmax (nm)',
+    'Rz (nm)', 'Ssk', 'Sku',
+    '晶粒数', '晶粒均径 (nm)', '晶粒中位 (nm)', '晶粒 CV', '晶粒面密度 (个/µm²)',
+    '颗粒数', '颗粒面密度 (个/µm²)', '颗粒均径 (nm)', '颗粒均高 (nm)',
+    '覆盖率 (%)', '检测阈值 (nm)', '噪声 σ (nm)'];
   const rows = items.map((i) => {
     const s = i.pstat;
+    const g = (i.grain && i.grain.stat && i.grain.stat.n) ? i.grain.stat : null;
     const f = (v, d) => (s.n ? v.toFixed(d) : '');
+    const gf = (v, d) => (g ? v.toFixed(d) : '');
     return [
-      i.name, i.scanUm,
+      i.name, i.surface, i.scanUm,
       i.rs.Ra.toFixed(3), i.rs.Rq.toFixed(3), i.rs.Rmax.toFixed(2), i.rs.Rz.toFixed(2),
       i.rs.Ssk.toFixed(2), i.rs.Sku.toFixed(2),
-      s.n, f(s.density, 3), f(s.dMean, 1), f(s.dMed, 1), f(s.dMax, 1),
-      f(s.hMean, 2), f(s.hMax, 2), (s.cover * 100).toFixed(3),
-      s.thrNm.toFixed(2), s.sigmaNm.toFixed(3)
+      g ? g.n : 0, gf(g ? g.dMean : 0, 1), gf(g ? g.dMed : 0, 1), gf(g ? g.cv : 0, 3),
+      gf(g ? g.density : 0, 2),
+      s.n, f(s.density, 3), f(s.dMean, 1), f(s.hMean, 2),
+      (s.cover * 100).toFixed(3), s.thrNm.toFixed(2), s.sigmaNm.toFixed(3)
     ];
   });
+  return toCSV(head, rows);
+}
+
+function grainCSV(items) {
+  const head = ['样品', '晶粒数', '平均等效直径 (nm)', '中位等效直径 (nm)', '标准差 (nm)',
+    'CV', 'P90 (nm)', '平均长轴 (nm)', '面密度 (个/µm²)'];
+  const rows = [];
+  for (const i of items) {
+    const g = i.grain && i.grain.stat;
+    if (!g || !g.n) continue;
+    rows.push([i.name, g.n, g.dMean.toFixed(1), g.dMed.toFixed(1), g.dStd.toFixed(1),
+      g.cv.toFixed(3), g.dP90.toFixed(1), g.dMajorMean.toFixed(1), g.density.toFixed(2)]);
+  }
+  return toCSV(head, rows);
+}
+
+function grainDetailCSV(items) {
+  const head = ['样品', '编号', '等效直径 (nm)', '长轴 (nm)', '面积 (px)'];
+  const rows = [];
+  for (const i of items) {
+    if (!i.grain || !i.grain.recs) continue;
+    let k = 0;
+    for (const r of i.grain.recs) {
+      if (r.edge) continue;
+      rows.push([i.name, ++k, r.dEq.toFixed(1), r.dMajor.toFixed(1), r.area]);
+    }
+  }
   return toCSV(head, rows);
 }
 
@@ -21355,116 +22858,170 @@ async function buildDocx(state) {
   };
 
   const items = state.items;
-  const withP = items.filter((i) => i.particles.length);
-  const totalP = items.reduce((a, i) => a + i.particles.length, 0);
-  const totalArea = items.reduce((a, i) => a + i.scanUm * i.scanUm, 0) || 1;
+  const grainItems = items.filter((i) => i.isGrain && i.grain && i.grain.stat && i.grain.stat.n);
+  const partItems = items.filter((i) => !i.isGrain);
+  const totalP = partItems.reduce((a, i) => a + i.particles.length, 0);
+  const totalArea = partItems.reduce((a, i) => a + i.scanUm * i.scanUm, 0) || 1;
 
   const children = [];
+  const CN = ['一', '二', '三', '四', '五', '六', '七', '八', '九'];
+  let sec = 0;
+  const H1 = (title, before = 240) => {
+    children.push(new Paragraph({
+      text: `${CN[sec++]}、${title}`, heading: HeadingLevel.HEADING_1,
+      keepNext: true, spacing: { before, after: 80 }
+    }));
+  };
+
   children.push(new Paragraph({
     alignment: AlignmentType.CENTER,
     spacing: { after: 80 },
-    children: [new TextRun({ text: 'AFM 表面形貌与颗粒分析报告', font: F, size: 40, bold: true })]
+    children: [new TextRun({ text: 'AFM 表面形貌分析报告', font: F, size: 40, bold: true })]
   }));
   children.push(P(`${state.rootLabel} · 共 ${items.length} 个测点 · 生成于 ${new Date().toLocaleString('zh-CN')}`,
     { center: true, size: 18, color: '666666' }));
 
-  // 一、概览
-  children.push(new Paragraph({ text: '一、数据概览', heading: HeadingLevel.HEADING_1, keepNext: true, spacing: { before: 240, after: 80 } }));
+  /* ---- 一、数据概览 ---- */
+  H1('数据概览');
   const metas = items.map((i) => i.meta);
   const scans = [...new Set(items.map((i) => i.scanUm))].join(' / ');
   const pts = [...new Set(items.map((i) => i.nx))].join(' / ');
   const modes = [...new Set(metas.map((m) => m.ImagingMode).filter(Boolean))].join(' / ') || '—';
   const rates = [...new Set(metas.map((m) => m.ScanRate).filter(Boolean))].join(' / ') || '—';
+  const custom = items.filter((i) => i.sbarOverride > 0);
+  const barTxt = custom.length
+    ? 'scale bar 长度部分为手动指定（' + custom.map((i) => `${i.name} ${fmtLen(i.barUm)}`).join('、') + '），其余按各自扫描范围自动选取'
+    : '全部图的 scale bar 按各自扫描范围自动选取长度';
   children.push(P(`扫描范围：${scans} µm ；像素：${pts} × ${pts} ；成像模式：${modes} ；扫描速率：${rates} Hz`, { size: 20 }));
-  children.push(P('高度通道为 float32 原始数据，已做一阶最小二乘去倾斜（仅去样品倾斜，不做逐行滤波），因此 Ra 包含真实长波起伏。色标为 Gwyddion 色标，全部图标注 1 µm scale bar。颗粒识别基于背景扣除后的局部凸起，详见第八节。', { size: 18 }));
+  children.push(P(`高度通道为 float32 原始数据，已做一阶最小二乘去倾斜（仅去样品倾斜，不做逐行滤波），因此 Ra 包含真实长波起伏。色标为 Gwyddion 色标，${barTxt}。`, { size: 18 }));
 
-  // 二、主要结果
-  children.push(new Paragraph({ text: '二、主要结果', heading: HeadingLevel.HEADING_1, keepNext: true, spacing: { before: 240, after: 80 } }));
-  const ra = items.map((i) => i.rs.Ra);
-  children.push(P(`本次共处理 ${items.length} 个测点，Ra 范围 ${Math.min(...ra).toFixed(2)}–${Math.max(...ra).toFixed(2)} nm。`, { size: 20 }));
-  if (withP.length) {
-    const dens = withP.map((i) => i.pstat.density);
-    const dmean = withP.map((i) => i.pstat.dMean);
-    children.push(P(`${withP.length} 个测点检出颗粒，合计 ${totalP} 个，平均面密度 ${(totalP / totalArea).toFixed(2)} 个/µm²；单点密度 ${Math.min(...dens).toFixed(2)}–${Math.max(...dens).toFixed(2)} 个/µm²，平均等效直径 ${Math.min(...dmean).toFixed(0)}–${Math.max(...dmean).toFixed(0)} nm。`, { size: 20 }));
-    const flat = withP.slice().sort((a, b) => a.pstat.density - b.pstat.density);
-    const worst = withP.slice().sort((a, b) => b.pstat.density - a.pstat.density)[0];
-    children.push(P(`密度最低：${flat[0].name}（${flat[0].pstat.density.toFixed(2)} 个/µm²）；密度最高：${worst.name}（${worst.pstat.density.toFixed(2)} 个/µm²，覆盖率 ${(worst.pstat.cover * 100).toFixed(2)}%），建议优先复核。`, { size: 20 }));
+  /* ---- 二、主要结果 ---- */
+  H1('主要结果');
+  const raAll = items.map((i) => i.rs.Ra);
+  children.push(P(
+    `本次共处理 ${items.length} 个测点，其中 ${grainItems.length} 个判为连续晶粒织构、`
+    + `${partItems.length} 个判为平坦基底 + 孤立颗粒（表面类型由 Ra/Rmax 与颗粒覆盖率自动判定，建议结合原图人工复核）。`
+    + `Ra 范围 ${Math.min(...raAll).toFixed(2)}–${Math.max(...raAll).toFixed(2)} nm。`, { size: 20 }));
+  if (grainItems.length) {
+    const gs = grainItems.map((i) => i.grain.stat);
+    const raG = grainItems.map((i) => i.rs.Ra);
+    children.push(P(
+      `晶粒织构测点：Ra ${Math.min(...raG).toFixed(2)}–${Math.max(...raG).toFixed(2)} nm，`
+      + `平均晶粒直径 ${Math.min(...gs.map((g) => g.dMean)).toFixed(0)}–${Math.max(...gs.map((g) => g.dMean)).toFixed(0)} nm（等效圆）。`,
+      { size: 20 }));
   }
-  const none = items.filter((i) => !i.particles.length);
-  if (none.length) {
-    children.push(P(`其余 ${none.length} 个测点未检出高于噪声的孤立颗粒（${none.map((i) => i.name).join('、')}），图像以连续起伏为主。`, { size: 20 }));
+  if (partItems.length) {
+    const wi = partItems.filter((i) => i.particles.length);
+    if (wi.length) {
+      const dens = wi.map((i) => i.pstat.density);
+      const worst = wi.slice().sort((a, b) => b.pstat.density - a.pstat.density)[0];
+      children.push(P(
+        `平坦基底测点：颗粒合计 ${totalP} 个，平均面密度 ${(totalP / totalArea).toFixed(2)} 个/µm²；`
+        + `单点密度 ${Math.min(...dens).toFixed(2)}–${Math.max(...dens).toFixed(2)} 个/µm²。`
+        + `密度最高为 ${worst.name}（${worst.pstat.density.toFixed(2)} 个/µm²，覆盖率 ${(worst.pstat.cover * 100).toFixed(2)}%），建议优先复核。`
+        + `此类测点的 Rmax 基本由孤立颗粒贡献，不宜作为薄膜本征粗糙度使用。`, { size: 20 }));
+    }
+    const none = partItems.filter((i) => !i.particles.length);
+    if (none.length) {
+      children.push(P(`其余 ${none.length} 个测点未检出高于噪声的孤立颗粒（${none.map((i) => i.name).join('、')}）。`,
+        { size: 20 }));
+    }
   }
 
-  // 三、粗糙度
-  children.push(new Paragraph({ text: '三、粗糙度汇总', heading: HeadingLevel.HEADING_1, keepNext: true, spacing: { before: 240, after: 80 } }));
+  /* ---- 三、粗糙度 ---- */
+  H1('粗糙度汇总');
   children.push(mkTable(
-    ['样品', 'Ra (nm)', 'Rq (nm)', 'Rmax (nm)', 'Rz (nm)', 'Ssk', 'Sku'],
+    ['样品', '表面类型', 'Ra (nm)', 'Rq (nm)', 'Rmax (nm)', 'Rz (nm)', 'Ssk', 'Sku'],
     items.map((i) => [
-      i.name, i.rs.Ra.toFixed(2), i.rs.Rq.toFixed(2), i.rs.Rmax.toFixed(2),
-      i.rs.Rz.toFixed(2), i.rs.Ssk.toFixed(2), i.rs.Sku.toFixed(2)
+      i.name, i.surface, i.rs.Ra.toFixed(2), i.rs.Rq.toFixed(2),
+      i.rs.Rmax.toFixed(2), i.rs.Rz.toFixed(2), i.rs.Ssk.toFixed(2), i.rs.Sku.toFixed(2)
     ]),
-    [22, 13, 13, 14, 13, 12, 12]
+    [19, 13, 11, 11, 12, 11, 11, 11]
   ));
-  children.push(P('Ra = 算术平均偏差；Rq = 均方根；Rmax = 峰谷差 P-V；Rz = 五点峰均值与五点谷深均值之差。单位 nm。', { size: 16, color: '555555' }));
+  children.push(P('Ra = 算术平均偏差；Rq = 均方根；Rmax = 峰谷差 P-V；Rz = 五点峰均值与五点谷深均值之差。单位 nm。',
+    { size: 16, color: '555555' }));
 
-  // 四、颗粒统计
-  children.push(new Paragraph({ text: '四、颗粒统计', heading: HeadingLevel.HEADING_1, keepNext: true, spacing: { before: 240, after: 80 } }));
-  children.push(mkTable(
-    ['样品', '颗粒数', '密度\n(个/µm²)', '均径\n(nm)', '中位\n(nm)', '最大\n(nm)', '均高\n(nm)', '最大高\n(nm)', '覆盖率\n(%)'],
-    items.map((i) => {
-      const s = i.pstat;
-      const f = (v, d) => (s.n ? v.toFixed(d) : '—');
-      return [i.name, s.n, f(s.density, 2), f(s.dMean, 1), f(s.dMed, 1),
-        f(s.dMax, 1), f(s.hMean, 2), f(s.hMax, 2), (s.cover * 100).toFixed(2)];
-    }),
-    [17, 9, 11, 10, 10, 10, 10, 11, 11]
-  ));
-  children.push(P('等效圆直径 = 2√(A/π)，A 为颗粒在阈值掩膜上的像素面积；高度为颗粒最高点相对背景中位数的高度；覆盖率 = 所有颗粒像素占全幅像素的比例。', { size: 16, color: '555555' }));
-
-  // 五、尺寸分布
-  if (state.imgHist) {
-    children.push(new Paragraph({ text: '五、颗粒尺寸分布', heading: HeadingLevel.HEADING_1, keepNext: true, spacing: { before: 240, after: 80 } }));
-    children.push(await imgPara(state.imgHist, state.histRatio, 560));
-    children.push(P('红色竖线为各样品颗粒等效直径的均值。', { size: 16, color: '555555' }));
+  /* ---- 四、晶粒 ---- */
+  if (grainItems.length) {
+    H1('晶粒尺寸统计');
+    children.push(mkTable(
+      ['样品', '晶粒数', '平均等效直径\n(nm)', '中位\n(nm)', '标准差\n(nm)', 'CV', 'P90\n(nm)', '平均长轴\n(nm)', '面密度\n(个/µm²)'],
+      grainItems.map((i) => {
+        const g = i.grain.stat;
+        return [i.name, g.n, g.dMean.toFixed(1), g.dMed.toFixed(1), g.dStd.toFixed(1),
+          g.cv.toFixed(3), g.dP90.toFixed(1), g.dMajorMean.toFixed(1), g.density.toFixed(2)];
+      })
+    ));
+    children.push(P('等效圆直径 = 2√(A/π)；长轴由区域二阶中心矩求得（与 regionprops.axis_major_length 同定义）；接触图像边缘的晶粒不参与统计。',
+      { size: 16, color: '555555' }));
   }
 
-  // 六、汇总图
-  children.push(new Paragraph({ text: '六、汇总图', heading: HeadingLevel.HEADING_1, keepNext: true, spacing: { before: 240, after: 80 } }));
+  /* ---- 五、颗粒 ---- */
+  if (partItems.length) {
+    H1('颗粒与缺陷统计');
+    children.push(mkTable(
+      ['样品', '颗粒数', '密度\n(个/µm²)', '均径\n(nm)', '中位\n(nm)', '最大\n(nm)', '均高\n(nm)', '最大高\n(nm)', '覆盖率\n(%)'],
+      partItems.map((i) => {
+        const s = i.pstat;
+        const f = (v, d) => (s.n ? v.toFixed(d) : '—');
+        return [i.name, s.n, f(s.density, 2), f(s.dMean, 1), f(s.dMed, 1),
+          f(s.dMax, 1), f(s.hMean, 2), f(s.hMax, 2), (s.cover * 100).toFixed(2)];
+      }),
+      [17, 9, 11, 10, 10, 10, 10, 11, 11]
+    ));
+    children.push(P('背景尺度 15 px 高斯高通后按 8σ 阈值分割（绝对下限 3 nm，面积 ≥ 6 px）；高度为颗粒最高点相对背景中位数的高度。',
+      { size: 16, color: '555555' }));
+  }
+
+  /* ---- 六、汇总图 ---- */
+  H1('汇总图');
   if (state.imgOverview) children.push(await imgPara(state.imgOverview, state.overviewRatio, 540));
+  if (state.imgGrainDist) children.push(await imgPara(state.imgGrainDist, state.grainDistRatio, 560));
+  if (state.imgPartDist) children.push(await imgPara(state.imgPartDist, state.partDistRatio, 560));
   if (state.imgBar) children.push(await imgPara(state.imgBar, 0.34, 540));
 
-  // 七、逐样品
+  /* ---- 七、逐样品 ---- */
   children.push(new Paragraph({ children: [new PageBreak()] }));
-  children.push(new Paragraph({ text: '七、逐样品图集', heading: HeadingLevel.HEADING_1, keepNext: true, spacing: { before: 0, after: 80 } }));
+  H1('逐样品图集', 0);
   for (let k = 0; k < items.length; k++) {
     const it = items[k];
     if (k) children.push(new Paragraph({ children: [new PageBreak()] }));
     children.push(new Paragraph({ text: it.name, heading: HeadingLevel.HEADING_2, keepNext: true, spacing: { after: 40 } }));
-    const s = it.pstat;
-    let line = `Ra ${it.rs.Ra.toFixed(2)} nm · Rq ${it.rs.Rq.toFixed(2)} nm · Rmax ${it.rs.Rmax.toFixed(2)} nm · Rz ${it.rs.Rz.toFixed(2)} nm`;
-    line += s.n
-      ? ` ｜ 颗粒 ${s.n} 个，${s.density.toFixed(2)} 个/µm²，均径 ${s.dMean.toFixed(0)} nm，均高 ${s.hMean.toFixed(1)} nm`
-      : ` ｜ 未检出颗粒（阈值 ${s.thrNm.toFixed(1)} nm，噪声 σ ${s.sigmaNm.toFixed(2)} nm）`;
+    let line = `Ra ${it.rs.Ra.toFixed(2)} nm · Rq ${it.rs.Rq.toFixed(2)} nm · `
+      + `Rmax ${it.rs.Rmax.toFixed(1)} nm · Rz ${it.rs.Rz.toFixed(1)} nm ｜ ${it.surface}`;
+    if (it.isGrain && it.grain && it.grain.stat && it.grain.stat.n) {
+      const g = it.grain.stat;
+      line += ` ｜ 晶粒 ${g.n} 个，平均 ${g.dMean.toFixed(0)} nm，中位 ${g.dMed.toFixed(0)} nm`;
+    } else if (!it.isGrain) {
+      const s = it.pstat;
+      line += s.n
+        ? ` ｜ 颗粒 ${s.n} 个，${s.density.toFixed(2)} 个/µm²，均高 ${s.hMean.toFixed(1)} nm`
+        : ` ｜ 未检出颗粒（阈值 ${s.thrNm.toFixed(1)} nm，噪声 σ ${s.sigmaNm.toFixed(2)} nm）`;
+    }
     children.push(P(line, { size: 18, color: '444444' }));
+    children.push(P(`scale bar ${fmtLen(it.barUm)}`, { size: 16, color: '888888' }));
 
-    for (const [key, ratioKey, w] of [['img2d', 'img2dRatio', 320], ['img3d', 'img3dRatio', 318], ['imgPart', 'imgPartRatio', 310]]) {
+    for (const [key, ratioKey, w] of [['img2d', 'img2dRatio', 320], ['img3d', 'img3dRatio', 318], ['imgFeat', 'imgFeatRatio', 310]]) {
       const blob = it[key];
       if (!blob) continue;
       children.push(await imgPara(blob, it[ratioKey], w));
     }
   }
 
-  // 八、方法
+  /* ---- 八、方法 ---- */
   children.push(new Paragraph({ children: [new PageBreak()] }));
-  children.push(new Paragraph({ text: '八、方法与口径', heading: HeadingLevel.HEADING_1, spacing: { after: 80 } }));
+  H1('方法与口径', 0);
   const bullets = [
     '数据解析：.ibw 为 Asylum MFP-3D 的 ARDF v2 容器，结构为 384 B 头 + N 通道 × W × H float32 + 参数文本 + 128×128 预览图 + 尾部索引；仅使用 Height 通道。',
     '去面：一阶最小二乘平面拟合后相减，只去除样品倾斜。',
     '粗糙度：Ra/Rq 按全幅逐点计算；Rmax 为峰谷差；Rz 为五点法；Ssk/Sku 为偏度与峰度。',
+    '表面类型判定：Ra/Rmax < 0.06，或颗粒覆盖率 > 0.2% 且颗粒均高 > 3Ra（且颗粒数 ≥ 5），判为「平坦基底 + 孤立颗粒」，此时不输出晶粒统计；其余判为「连续晶粒织构」。',
+    '晶粒分割：σ=1 px 高斯平滑 → 归一到 0–1 → 以 0.45×P99 为阈值取高度局部极大作种子（最小间距 3 px）→ 负高度分水岭 → 面积 ≥ 12 px 计入，触边晶粒剔除。',
     '颗粒识别：15 px（约 0.15 µm）高斯背景 → 原图相减得高通残差 → 由残差 MAD 估计噪声 σ（σ=1.4826·MAD）→ 阈值 max(8σ, 3 nm) → 8 邻域连通域 → 面积 ≥ 6 px 计为颗粒。',
     '颗粒尺寸：等效圆直径 2√(A/π)；高度为颗粒内最高点相对全幅背景中位数的高度。',
-    '阈值自适应：平滑表面 σ 小，可检出数 nm 级颗粒；粗糙表面 σ 大，阈值随之抬高。报告中「0 个」表示未检出高于噪声的孤立凸起，不等于表面洁净，建议结合 2D 图或降低阈值复核。',
-    '说明：本报告由浏览器端脚本生成，与桌面版（Python）在浮点累加顺序上略有差异，统计值一般在 1% 以内一致。'
+    '阈值自适应：平滑表面 σ 小，可检出数 nm 级颗粒；粗糙表面 σ 大，阈值随之抬高。报告中「0 个」表示未检出高于噪声的孤立凸起，不等于表面洁净。',
+    'scale bar：默认按每张图自己的扫描范围取约 1/4 的整齐长度（1/2/5×10ⁿ），可在页面上逐图改为自定义值，只影响标注，不影响任何统计值。',
+    '说明：本报告由浏览器端脚本生成，与桌面版（Python）在浮点累加顺序与分水岭实现上略有差异，统计值一般在 1% 以内一致。'
   ];
   for (const b of bullets) {
     children.push(new Paragraph({
@@ -21489,21 +23046,32 @@ async function buildZip(state) {
   const zip = new JSZip();
   const root = zip.folder('AFM分析结果');
   const figs = root.folder('figs');
-  const d2 = figs.folder('01_2D'), d3 = figs.folder('02_3D'), dp = figs.folder('03_颗粒');
+  const d2 = figs.folder('01_2D'), d3 = figs.folder('02_3D');
+  const dg = figs.folder('03_晶粒'), dp = figs.folder('04_颗粒');
 
   for (const it of state.items) {
     if (it.img2d) d2.file(`${it.name}_2D.png`, it.img2d);
     if (it.img3d) d3.file(`${it.name}_3D.png`, it.img3d);
-    if (it.imgPart) dp.file(`${it.name}_颗粒.png`, it.imgPart);
+    if (it.isGrain && it.imgFeat) dg.file(`${it.name}_晶粒.png`, it.imgFeat);
+    if (!it.isGrain && it.imgFeat) dp.file(`${it.name}_颗粒.png`, it.imgFeat);
   }
   const sum = root.folder('汇总图');
   if (state.imgOverview) sum.file('总览_2D.png', state.imgOverview);
+  if (state.imgGrainDist) sum.file('晶粒尺寸分布.png', state.imgGrainDist);
+  if (state.imgPartDist) sum.file('颗粒尺寸分布.png', state.imgPartDist);
   if (state.imgBar) sum.file('对比_Ra_Rq.png', state.imgBar);
-  if (state.imgHist) sum.file('颗粒尺寸分布.png', state.imgHist);
 
   const tab = root.folder('tables');
   tab.file('汇总统计.csv', summaryCSV(state.items));
-  tab.file('颗粒明细.csv', particleCSV(state.items));
+  const hasGrain = state.items.some((i) => i.isGrain && i.grain && i.grain.stat && i.grain.stat.n);
+  if (hasGrain) {
+    tab.file('汇总_晶粒.csv', grainCSV(state.items));
+    tab.file('晶粒明细.csv', grainDetailCSV(state.items));
+  }
+  const parts = state.items.filter((i) => !i.isGrain);
+  if (parts.some((i) => i.particles.length)) {
+    tab.file('汇总_颗粒.csv', particleCSV(parts));
+  }
 
   if (state.docxBlob) root.file('AFM分析报告.docx', state.docxBlob);
   return await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
@@ -21515,8 +23083,9 @@ async function buildZip(state) {
  * ============================================================ */
 
 const state = {
-  items: [], imgOverview: null, imgBar: null, imgHist: null, docxBlob: null,
-  overviewRatio: 1, histRatio: 1, rootLabel: '本地文件'
+  items: [], imgOverview: null, imgBar: null, imgGrainDist: null, imgPartDist: null,
+  docxBlob: null, overviewRatio: 1, grainDistRatio: 1, partDistRatio: 1,
+  rootLabel: '本地文件', failed: [], renderSeq: 0
 };
 
 const $ = (s) => document.querySelector(s);
@@ -21529,6 +23098,11 @@ function setProgress(p, text) {
   box.querySelector('span').textContent = text || '';
 }
 function hideProgress() { $('#progress').classList.add('hidden'); }
+
+/* 每张图自己的 scale bar：有自定义值就用（并钳制到 2%–90%），否则按本图扫描范围自动取 */
+function barFor(it) {
+  return it.sbarOverride > 0 ? clampBar(it.sbarOverride, it.scanUm) : autoBar(it.scanUm);
+}
 
 /* ---------- 拖放 ---------- */
 async function entriesFrom(dt) {
@@ -21563,7 +23137,8 @@ async function processFiles(files) {
   state.docxBlob = null;
   state.imgOverview = null;
   state.imgBar = null;
-  state.imgHist = null;
+  state.imgGrainDist = null;
+  state.imgPartDist = null;
   const failed = [];
   const used = new Set();
 
@@ -21578,6 +23153,7 @@ async function processFiles(files) {
       if (used.has(nm)) nm = `${nm}_${i + 1}`;
       used.add(nm);
       it.name = nm;
+      it.sbarOverride = null;
       state.items.push(it);
     } catch (e) {
       console.warn(f.name, e);
@@ -21603,6 +23179,7 @@ async function processFiles(files) {
   await tick();
   await renderSummaryImages();
 
+  state.failed = failed;
   setProgress(1, '完成');
   setTimeout(hideProgress, 600);
   renderAll(failed);
@@ -21613,23 +23190,30 @@ function canvasToBlob(c) {
 }
 
 async function renderItemImages(it) {
+  it.barUm = barFor(it);
+
   const c1 = document.createElement('canvas');
   draw2D(c1, it, {
-    W: 620, H: 566, title: it.name,
+    W: 640, H: 592, barUm: it.barUm, title: it.name,
     subtitle: `Ra ${it.rs.Ra.toFixed(2)} nm · Rq ${it.rs.Rq.toFixed(2)} nm · Rmax ${it.rs.Rmax.toFixed(1)} nm`
   });
   it.img2d = await canvasToBlob(c1);
   it.img2dRatio = c1.height / c1.width;
 
   const c2 = document.createElement('canvas');
-  draw3D(c2, it, { W: 660, H: 560, title: it.name + '  3D' });
+  draw3D(c2, it, { W: 700, H: 600, title: it.name + '  3D' });
   it.img3d = await canvasToBlob(c2);
   it.img3dRatio = c2.height / c2.width;
 
+  // 晶粒织构 → 晶粒分割图；平坦基底 → 颗粒标记图
   const c3 = document.createElement('canvas');
-  drawParticles(c3, it, { W: 620, H: 566 });
-  it.imgPart = await canvasToBlob(c3);
-  it.imgPartRatio = c3.height / c3.width;
+  if (it.isGrain && it.grain && it.grain.seg) {
+    drawGrains(c3, it, { W: 640, H: 592, barUm: it.barUm });
+  } else {
+    drawParticles(c3, it, { W: 640, H: 592, barUm: it.barUm });
+  }
+  it.imgFeat = await canvasToBlob(c3);
+  it.imgFeatRatio = c3.height / c3.width;
 }
 
 async function renderSummaryImages() {
@@ -21639,27 +23223,44 @@ async function renderSummaryImages() {
   state.overviewRatio = c.height / c.width;
 
   const c2 = document.createElement('canvas');
-  drawBar(c2, state.items, { W: 900, H: 320 });
+  drawBar(c2, state.items, { W: 960, H: 350 });
   state.imgBar = await canvasToBlob(c2);
 
-  const withP = state.items.filter((i) => i.particles.length);
-  if (withP.length) {
+  // 晶粒尺寸分布（仅晶粒织构测点）
+  const gItems = state.items.filter((i) => i.isGrain && i.grain && i.grain.values && i.grain.values.length);
+  state.imgGrainDist = null;
+  if (gItems.length) {
     const c3 = document.createElement('canvas');
-    drawHistGrid(c3, withP.map((i) => ({
+    drawHistGrid(c3, gItems.map((i) => ({
+      name: `${i.name}（n=${i.grain.stat.n}）`,
+      values: i.grain.values
+    })), { cols: Math.min(3, gItems.length), title: '晶粒尺寸分布（等效圆直径，已剔除触边晶粒）' });
+    state.imgGrainDist = await canvasToBlob(c3);
+    state.grainDistRatio = c3.height / c3.width;
+  }
+
+  // 颗粒尺寸分布（仅平坦基底测点）
+  const pItems = state.items.filter((i) => !i.isGrain && i.particles.length);
+  state.imgPartDist = null;
+  if (pItems.length) {
+    const c4 = document.createElement('canvas');
+    drawHistGrid(c4, pItems.map((i) => ({
       name: `${i.name}（n=${i.particles.length}）`,
       values: i.particles.map((p) => p.dEq)
-    })), { cols: Math.min(3, withP.length), title: '颗粒尺寸分布（等效圆直径）' });
-    state.imgHist = await canvasToBlob(c3);
-    state.histRatio = c3.height / c3.width;
+    })), { cols: Math.min(3, pItems.length), title: '颗粒尺寸分布（等效圆直径）' });
+    state.imgPartDist = await canvasToBlob(c4);
+    state.partDistRatio = c4.height / c4.width;
   }
 }
 
 /* ---------- 渲染页面 ---------- */
-function renderAll(failed) {
+function renderAll(failed, scroll = true) {
   const items = state.items;
-  const withP = items.filter((i) => i.particles.length);
-  const totalP = items.reduce((a, i) => a + i.particles.length, 0);
-  const totalArea = items.reduce((a, i) => a + i.scanUm * i.scanUm, 0) || 1;
+  const gItems = items.filter((i) => i.isGrain);
+  const pItems = items.filter((i) => !i.isGrain);
+  const totalP = pItems.reduce((a, i) => a + i.particles.length, 0);
+  const gMeans = gItems.filter((i) => i.grain && i.grain.stat && i.grain.stat.n)
+    .map((i) => i.grain.stat.dMean);
 
   $('#empty').classList.add('hidden');
 
@@ -21670,25 +23271,43 @@ function renderAll(failed) {
   sum.innerHTML = `
     <div class="stats">
       <div class="stat"><b>${items.length}</b><span>测点</span></div>
-      <div class="stat"><b>${withP.length}</b><span>检出颗粒测点</span></div>
+      <div class="stat"><b>${gItems.length}</b><span>晶粒织构</span></div>
+      <div class="stat"><b>${pItems.length}</b><span>平坦 + 颗粒</span></div>
+      <div class="stat"><b>${gMeans.length ? (gMeans.reduce((a, b) => a + b, 0) / gMeans.length).toFixed(0) : '—'}</b><span>平均晶粒径 (nm)</span></div>
       <div class="stat"><b>${totalP}</b><span>颗粒总数</span></div>
-      <div class="stat"><b>${(totalP / totalArea).toFixed(2)}</b><span>平均面密度 (个/µm²)</span></div>
       <div class="stat"><b>${scans}</b><span>扫描范围 (µm)</span></div>
-      <div class="stat"><b>${items[0].nx}</b><span>像素</span></div>
     </div>
     ${failed.length ? `<p class="warn">${failed.length} 个文件解析失败：${failed.join('；')}</p>` : ''}`;
 
-  // 表 1：粗糙度
+  // 表 1：粗糙度（含表面类型）
   const rw = $('#tableWrap');
   rw.classList.remove('hidden');
   const rows1 = items.map((i) => `
     <tr>
       <td class="l">${i.name}</td>
+      <td class="t" title="${i.surfaceWhy}">${i.surface}</td>
       <td>${i.rs.Ra.toFixed(2)}</td><td>${i.rs.Rq.toFixed(2)}</td>
       <td>${i.rs.Rmax.toFixed(1)}</td><td>${i.rs.Rz.toFixed(1)}</td>
       <td>${i.rs.Ssk.toFixed(2)}</td><td>${i.rs.Sku.toFixed(2)}</td>
     </tr>`).join('');
-  const rows2 = items.map((i) => {
+
+  // 表 2：晶粒尺寸
+  const gRows = gItems.map((i) => {
+    const g = i.grain && i.grain.stat;
+    if (!g || !g.n) {
+      return `<tr><td class="l">${i.name}</td><td colspan="8" class="t">未得到有效晶粒（分割区域全部接触边缘）</td></tr>`;
+    }
+    return `
+    <tr>
+      <td class="l">${i.name}</td>
+      <td>${g.n}</td><td>${g.dMean.toFixed(1)}</td><td>${g.dMed.toFixed(1)}</td>
+      <td>${g.dStd.toFixed(1)}</td><td>${g.cv.toFixed(3)}</td><td>${g.dP90.toFixed(1)}</td>
+      <td>${g.dMajorMean.toFixed(1)}</td><td>${g.density.toFixed(2)}</td>
+    </tr>`;
+  }).join('');
+
+  // 表 3：颗粒
+  const pRows = pItems.map((i) => {
     const s = i.pstat;
     const dash = (v, d) => (i.particles.length ? v.toFixed(d) : '—');
     return `
@@ -21707,67 +23326,107 @@ function renderAll(failed) {
   }).join('');
 
   rw.innerHTML = `
-    <h2>表 1 · 粗糙度 <span class="hint">1 阶去面 · 单位 nm</span></h2>
+    <h2>表 1 · 粗糙度 <span class="hint">1 阶去面 · 单位 nm · 表面类型由 Ra/Rmax 与颗粒覆盖率自动判定</span></h2>
     <div class="tablewrap"><table class="data">
       <thead><tr>
-        <th class="l">样品</th><th>Ra</th><th>Rq</th><th>Rmax</th><th>Rz</th><th>Ssk</th><th>Sku</th>
+        <th class="l">样品</th><th class="l">表面类型</th>
+        <th>Ra</th><th>Rq</th><th>Rmax</th><th>Rz</th><th>Ssk</th><th>Sku</th>
       </tr></thead><tbody>${rows1}</tbody>
     </table></div>
 
-    <h2>表 2 · 颗粒识别 <span class="hint">高通背景扣除 · 尺寸为等效圆直径</span></h2>
+    ${gItems.length ? `
+    <h2>表 2 · 晶粒尺寸统计 <span class="hint">分水岭分割 · 等效圆直径 · 已剔除触边晶粒</span></h2>
+    <div class="tablewrap"><table class="data">
+      <thead><tr>
+        <th class="l">样品</th><th>晶粒数</th><th>平均等效<br>直径 (nm)</th><th>中位<br>(nm)</th>
+        <th>标准差<br>(nm)</th><th>CV</th><th>P90<br>(nm)</th><th>平均长轴<br>(nm)</th>
+        <th>面密度<br>(个/µm²)</th>
+      </tr></thead><tbody>${gRows}</tbody>
+    </table></div>` : ''}
+
+    ${pItems.length ? `
+    <h2>表 3 · 颗粒与缺陷 <span class="hint">高通背景扣除 · 尺寸为等效圆直径</span></h2>
     <div class="tablewrap"><table class="data">
       <thead><tr>
         <th class="l">样品</th><th>颗粒数</th><th>面密度<br>(个/µm²)</th><th>均径<br>(nm)</th>
         <th>中位<br>(nm)</th><th>最大<br>(nm)</th><th>均高<br>(nm)</th><th>最大高<br>(nm)</th>
         <th>覆盖率<br>(%)</th><th>阈值<br>(nm)</th>
-      </tr></thead><tbody>${rows2}</tbody>
-    </table></div>
-    <p class="note">Ra = 算术平均偏差；Rq = 均方根；Rmax = 峰谷差；Rz = 五点法。颗粒口径见文末说明。</p>`;
+      </tr></thead><tbody>${pRows}</tbody>
+    </table></div>` : ''}
+
+    <p class="note">Ra = 算术平均偏差；Rq = 均方根；Rmax = 峰谷差；Rz = 五点法。
+      「晶粒织构」测点出晶粒统计，「平坦 + 颗粒」测点出颗粒统计，不会重复计入。各口径见文末说明。</p>`;
 
   // 汇总图
   const ov = $('#overview');
   ov.classList.remove('hidden');
   const figs = [
-    `<figure><img src="${URL.createObjectURL(state.imgOverview)}" alt="overview"><figcaption>总览（Gwyddion 色标，每格色标独立，scale bar = 1 µm）</figcaption></figure>`,
+    `<figure><img src="${URL.createObjectURL(state.imgOverview)}" alt="overview"><figcaption>总览（Gwyddion 色标，每格色标与 scale bar 均按自身扫描范围独立标定）</figcaption></figure>`,
     `<figure><img src="${URL.createObjectURL(state.imgBar)}" alt="bar"><figcaption>各样品 Ra / Rq 对比</figcaption></figure>`
   ];
-  if (state.imgHist) {
-    figs.push(`<figure><img src="${URL.createObjectURL(state.imgHist)}" alt="hist"><figcaption>颗粒尺寸分布</figcaption></figure>`);
+  if (state.imgGrainDist) {
+    figs.push(`<figure><img src="${URL.createObjectURL(state.imgGrainDist)}" alt="grain-dist"><figcaption>晶粒尺寸分布</figcaption></figure>`);
+  }
+  if (state.imgPartDist) {
+    figs.push(`<figure><img src="${URL.createObjectURL(state.imgPartDist)}" alt="part-dist"><figcaption>颗粒尺寸分布</figcaption></figure>`);
   }
   ov.innerHTML = `<h2>汇总图</h2><div class="figs">${figs.join('')}</div>`;
 
   // 样品卡片
   const cards = $('#cards');
   cards.classList.remove('hidden');
-  cards.innerHTML = '<h2>逐样品图集</h2>' + items.map((i, k) => {
-    const s = i.pstat;
-    const metrics = `Ra ${i.rs.Ra.toFixed(2)} · Rq ${i.rs.Rq.toFixed(2)} · Rmax ${i.rs.Rmax.toFixed(1)} · Rz ${i.rs.Rz.toFixed(1)} nm`;
-    const extra = s.n
-      ? `颗粒 ${s.n} 个 · ${s.density.toFixed(2)} 个/µm² · 均径 ${s.dMean.toFixed(0)} nm · 均高 ${s.hMean.toFixed(1)} nm`
-      : `未检出颗粒（阈值 ${s.thrNm.toFixed(1)} nm）`;
-    const figList = [
-      `<figure><img loading="lazy" src="${URL.createObjectURL(i.img2d)}"><figcaption>2D 高度图</figcaption></figure>`,
-      `<figure><img loading="lazy" src="${URL.createObjectURL(i.img3d)}"><figcaption>3D 形貌</figcaption></figure>`,
-      `<figure><img loading="lazy" src="${URL.createObjectURL(i.imgPart)}"><figcaption>颗粒标记</figcaption></figure>`
-    ].join('');
-    return `<details class="card" ${k === 0 ? 'open' : ''}>
-      <summary><b>${i.name}</b><span class="sub">${extra}</span></summary>
+  cards.innerHTML = '<h2>逐样品图集 <span class="hint">每张图的 scale bar 可单独调整</span></h2>'
+    + items.map((i, k) => {
+      const g = i.grain && i.grain.stat;
+      const s = i.pstat;
+      const metrics = `Ra ${i.rs.Ra.toFixed(2)} · Rq ${i.rs.Rq.toFixed(2)} · Rmax ${i.rs.Rmax.toFixed(1)} · Rz ${i.rs.Rz.toFixed(1)} nm`;
+      let extra;
+      if (i.isGrain) {
+        extra = g && g.n
+          ? `晶粒 ${g.n} 个 · 平均 ${g.dMean.toFixed(0)} nm · 中位 ${g.dMed.toFixed(0)} nm`
+          : '未得到有效晶粒';
+      } else {
+        extra = s.n
+          ? `颗粒 ${s.n} 个 · ${s.density.toFixed(2)} 个/µm² · 均径 ${s.dMean.toFixed(0)} nm · 均高 ${s.hMean.toFixed(1)} nm`
+          : `未检出颗粒（阈值 ${s.thrNm.toFixed(1)} nm）`;
+      }
+      const featCap = i.isGrain ? '晶粒分割' : '颗粒标记';
+      const figList = [
+        `<figure><img loading="lazy" src="${URL.createObjectURL(i.img2d)}"><figcaption>2D 高度图</figcaption></figure>`,
+        `<figure><img loading="lazy" src="${URL.createObjectURL(i.img3d)}"><figcaption>3D 形貌</figcaption></figure>`,
+        `<figure><img loading="lazy" src="${URL.createObjectURL(i.imgFeat)}"><figcaption>${featCap}</figcaption></figure>`
+      ].join('');
+      const custom = i.sbarOverride > 0;
+      return `<details class="card" ${k === 0 ? 'open' : ''}>
+      <summary><b>${i.name}</b><span class="sub">${i.surface} ｜ ${extra}</span></summary>
       <p class="metrics">${metrics}</p>
+      <div class="sbline">
+        <label>scale bar</label>
+        <input class="sbInput" data-k="${k}" type="number" min="0" step="0.01" inputmode="decimal"
+               value="${custom ? i.sbarOverride : ''}"
+               placeholder="自动 ${fmtUm(autoBar(i.scanUm))}">
+        <span class="unit">µm</span>
+        <span class="hint">当前 ${fmtLen(i.barUm)}（${custom ? '自定义' : '自动'}）· 留空即恢复自动</span>
+        ${custom ? `<button class="btn ghost tiny" data-reset="${k}">恢复自动</button>` : ''}
+      </div>
       <div class="figs">${figList}</div>
     </details>`;
-  }).join('');
+    }).join('');
 
   // 下载
   const dl = $('#downloads');
   dl.classList.remove('hidden');
+  const gcsv = gItems.some((i) => i.grain && i.grain.stat && i.grain.stat.n);
   dl.innerHTML = `<h2>导出</h2>
     <div class="btns">
       <button id="btnZip" class="btn">打包 ZIP（图片 + CSV + Word）</button>
       <button id="btnDocx" class="btn ghost">仅下载 Word 报告</button>
       <button id="btnCsv" class="btn ghost">汇总 CSV</button>
-      <button id="btnCsvP" class="btn ghost">颗粒明细 CSV</button>
+      ${gcsv ? '<button id="btnCsvG" class="btn ghost">晶粒 CSV</button>' : ''}
+      ${pItems.length ? '<button id="btnCsvP" class="btn ghost">颗粒明细 CSV</button>' : ''}
     </div>
-    <p class="note">Word 报告包含概览、结论、粗糙度表、颗粒统计表、颗粒尺寸分布图、总览图与逐样品图。</p>`;
+    <p class="note">Word 报告按「概览 → 主要结果 → 粗糙度 → 晶粒 → 颗粒 → 汇总图 → 逐样品 → 方法与口径」八节编排，
+      与桌面版一致；晶粒与颗粒按表面类型分别成表。</p>`;
 
   $('#btnZip').onclick = async () => {
     $('#btnZip').disabled = true;
@@ -21796,19 +23455,67 @@ function renderAll(failed) {
     download(new Blob([summaryCSV(items)], { type: 'text/csv;charset=utf-8' }),
       `AFM汇总_${stamp()}.csv`);
   };
-  $('#btnCsvP').onclick = () => {
-    download(new Blob([particleCSV(items)], { type: 'text/csv;charset=utf-8' }),
-      `AFM颗粒明细_${stamp()}.csv`);
-  };
+  if (gcsv) {
+    $('#btnCsvG').onclick = () => {
+      download(new Blob([grainCSV(items)], { type: 'text/csv;charset=utf-8' }),
+        `AFM晶粒_${stamp()}.csv`);
+    };
+  }
+  if (pItems.length) {
+    $('#btnCsvP').onclick = () => {
+      download(new Blob([particleCSV(pItems)], { type: 'text/csv;charset=utf-8' }),
+        `AFM颗粒明细_${stamp()}.csv`);
+    };
+  }
 
-  const top = document.getElementById('summary');
-  if (top) top.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (scroll) {
+    const top = document.getElementById('summary');
+    if (top) top.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
 }
 
 function stamp() {
   const d = new Date();
   const p = (n) => String(n).padStart(2, '0');
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}`;
+}
+
+/* ---------- scale bar 逐图修改后重绘 ---------- */
+let barTimer = null, barBusy = false, barQueue = [];
+
+function queueBarRedraw(k) {
+  if (k != null && !barQueue.includes(k)) barQueue.push(k);
+  clearTimeout(barTimer);
+  barTimer = setTimeout(runBarRedraw, 220);
+}
+
+async function runBarRedraw(all) {
+  if (!state.items.length) return;
+  if (barBusy) { if (all) barQueue = state.items.map((_, i) => i); return; }
+  if (all) barQueue = state.items.map((_, i) => i);
+  const ks = barQueue.slice();
+  barQueue = [];
+  if (!ks.length) return;
+
+  barBusy = true;
+  state.docxBlob = null;
+  setProgress(0.1, '按新 scale bar 重绘…');
+  for (let n = 0; n < ks.length; n++) {
+    const it = state.items[ks[n]];
+    if (!it) continue;
+    setProgress(0.1 + (n / ks.length) * 0.65, `(${n + 1}/${ks.length}) 重绘 ${it.name}`);
+    await tick();
+    await renderItemImages(it);
+  }
+  setProgress(0.85, '重新生成汇总图…');
+  await tick();
+  await renderSummaryImages();
+  state.renderSeq++;
+  renderAll(state.failed, false);
+  setProgress(1, '已更新');
+  setTimeout(hideProgress, 400);
+  barBusy = false;
+  if (barQueue.length) runBarRedraw();
 }
 
 /* ---------- 事件绑定 ---------- */
@@ -21825,6 +23532,44 @@ window.addEventListener('DOMContentLoaded', () => {
     e.target.value = '';
   });
 
+  // 逐图 scale bar：改完（回车/失焦）才重绘，避免打字过程中反复重算
+  $('#cards').addEventListener('change', (e) => {
+    const el = e.target;
+    if (!el.classList || !el.classList.contains('sbInput')) return;
+    const k = Number(el.dataset.k);
+    const it = state.items[k];
+    if (!it) return;
+    const raw = (el.value || '').trim();
+    if (!raw) {
+      it.sbarOverride = null;
+    } else {
+      const v = parseFloat(raw);
+      if (!isFinite(v) || v <= 0) return;
+      it.sbarOverride = v;
+    }
+    queueBarRedraw(k);
+  });
+
+  $('#cards').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-reset]');
+    if (!b) return;
+    const k = Number(b.dataset.reset);
+    const it = state.items[k];
+    if (!it) return;
+    it.sbarOverride = null;
+    queueBarRedraw(k);
+  });
+
+  const autoAll = $('#sbarAutoAll');
+  if (autoAll) {
+    autoAll.addEventListener('click', () => {
+      if (!state.items.length) return;
+      state.items.forEach((i) => { i.sbarOverride = null; });
+      queueBarRedraw(null);
+      runBarRedraw(true);
+    });
+  }
+
   const drop = $('#drop');
   ['dragenter', 'dragover'].forEach((ev) => drop.addEventListener(ev, (e) => {
     e.preventDefault(); drop.classList.add('over');
@@ -21837,6 +23582,514 @@ window.addEventListener('DOMContentLoaded', () => {
   drop.addEventListener('drop', async (e) => {
     const files = await entriesFrom(e.dataTransfer);
     if (files.length) processFiles(files);
+  });
+});
+
+
+/* ============================================================
+ * xrd-ui.js — XRD 页面流程：读文件 → 判扫描类型 → 分析 → 出图 → 导出
+ *   Omega 摇摆曲线：横轴 ω，出 FWHM
+ *   2θ-θ 扫描    ：横轴 2θ，log 纵轴，只标峰位
+ * ============================================================ */
+
+const xstate = {
+  items: [], docxBlob: null,
+  fit: 'Voigt', bg: true, window: 'local', residuals: false,
+  mode: 'auto', modeDecision: null
+};
+
+const $x = (s) => document.querySelector(s);
+const xtick = () => new Promise((r) => setTimeout(r, 0));
+
+function xsetProgress(p, text) {
+  const box = $x('#xProgress');
+  box.classList.remove('hidden');
+  box.querySelector('i').style.width = Math.round(p * 100) + '%';
+  box.querySelector('span').textContent = text || '';
+}
+function xhideProgress() { $x('#xProgress').classList.add('hidden'); }
+
+function xOpts() {
+  xstate.bg = $x('#xBg').checked;
+  xstate.fit = $x('#xFit').value;
+  xstate.window = $x('#xWin').value;
+  xstate.residuals = $x('#xRes').checked;
+  xstate.mode = $x('#xMode').value;
+  if (xstate.mode !== 'auto') xstate.modeDecision = xstate.mode;
+}
+
+/* 决定这条曲线按哪种扫描处理；判不出来时问用户一次并记住 */
+function xResolveMode(fileName, parsed) {
+  if (xstate.mode !== 'auto') return { mode: xstate.mode, why: '手动指定' };
+  const g = guessScanMode(fileName, parsed);
+  if (g.mode) return g;
+  if (xstate.modeDecision) return { mode: xstate.modeDecision, why: '沿用上次选择' };
+  const isTwo = window.confirm(
+    `无法自动判断 ${fileName} 的扫描类型。\n\n` +
+    `确定 = 2θ-θ 扫描（横轴 2θ，log 纵轴，只标峰位）\n` +
+    `取消 = Omega 摇摆曲线（横轴 ω，输出 FWHM）`);
+  xstate.modeDecision = isTwo ? '2theta' : 'omega';
+  return { mode: xstate.modeDecision, why: '手动选择' };
+}
+
+async function xProcessFiles(files) {
+  const list = [...files].filter((f) => /\.(xrdml|txt|xy)$/i.test(f.name));
+  if (!list.length) {
+    alert('没有找到 .xrdml / .txt / .xy 文件。');
+    return;
+  }
+  list.sort((a, b) => a.name.localeCompare(b.name));
+  xOpts();
+  xstate.items = [];
+  xstate.docxBlob = null;
+
+  const failed = [];
+  for (let i = 0; i < list.length; i++) {
+    const f = list[i];
+    xsetProgress(i / list.length * 0.75, `(${i + 1}/${list.length}) 解析 ${f.name}`);
+    await xtick();
+    try {
+      const text = await f.text();
+      const parsed = /\.xrdml$/i.test(f.name)
+        ? parseXRDML(text, f.name) : parseXRDTxt(text, f.name);
+      const m = xResolveMode(f.name, parsed);
+      const item = {
+        name: f.name.replace(/\.(xrdml|txt|xy)$/i, ''),
+        file: f.name,
+        mode: m.mode, modeWhy: m.why,
+        scanAxis: parsed.scanAxis || '',
+        x: parsed.x, y: parsed.y
+      };
+      item.res = analyzeXRDCurve(item.x, item.y, {
+        mode: m.mode, background: xstate.bg,
+        fit: xstate.fit, window: xstate.window
+      });
+      await xRenderItem(item);
+      xstate.items.push(item);
+    } catch (e) {
+      console.warn(f.name, e);
+      failed.push(f.name + '：' + e.message);
+    }
+    await xtick();
+  }
+
+  if (!xstate.items.length) {
+    xhideProgress();
+    alert('全部文件解析失败：\n' + failed.join('\n'));
+    return;
+  }
+
+  xsetProgress(1, '完成');
+  setTimeout(xhideProgress, 600);
+  xRenderAll(failed);
+}
+
+async function xRenderItem(item) {
+  const r = item.res;
+  const c = document.createElement('canvas');
+  let title, sub;
+  if (item.mode === '2theta') {
+    title = `${item.name}　（2θ-θ 扫描，${r.nPeaks} 个峰）`;
+    sub = r.nPeaks
+      ? '峰位：' + r.peaks.slice(0, 6).map((p) => p.x.toFixed(2) + '°').join('  ')
+        + (r.nPeaks > 6 ? ' …' : '')
+      : '未检出明显衍射峰';
+  } else {
+    const fits = Object.keys(r.fits);
+    title = `${item.name}　（${r.method}）`;
+    sub = `主峰 ${r.peakX.toFixed(3)}° ｜ ` + (fits.length
+      ? fits.map((k) => `${k} ${r.fits[k].fwhm.toFixed(4)}°`).join('  ')
+      : `直接半高 ${r.fwhmDirect.toFixed(4)}°`);
+  }
+  drawXRDFit(c, { ...item, ...r }, {
+    W: 980, H: xstate.residuals && item.mode !== '2theta' ? 830 : 600,
+    residuals: xstate.residuals && item.mode !== '2theta',
+    logY: item.mode === '2theta',
+    title, subtitle: sub
+  });
+  item.img = await new Promise((res) => c.toBlob((b) => res(b), 'image/png'));
+  item.w = c.width; item.h = c.height;
+}
+
+/* ---------------- 页面渲染 ---------------- */
+function xTableOmega(rows) {
+  if (!rows.length) return '';
+  return `<h2>表 1 · Omega 摇摆曲线 FWHM <span class="hint">单位：°</span></h2>
+    <div class="tablewrap"><table class="data">
+      <thead><tr>
+        <th class="l">样品</th><th>主峰 (°)</th><th>直接 FWHM</th>
+        <th>Voigt FWHM</th><th>Voigt R²</th><th>Lorentz FWHM</th>
+        <th>Gaussian FWHM</th><th>拟合窗口</th>
+      </tr></thead><tbody>${rows.map((it) => {
+        const r = it.res, f = r.fits;
+        const g = (k, p, d) => (f[k] ? f[k][p].toFixed(d) : '—');
+        const win = (Object.values(f)[0] || {}).window || '—';
+        return `<tr>
+          <td class="l">${it.name}</td>
+          <td>${r.peakX.toFixed(3)}</td>
+          <td>${r.fwhmDirect.toFixed(4)}</td>
+          <td>${g('Voigt', 'fwhm', 4)}</td>
+          <td>${g('Voigt', 'r2', 4)}</td>
+          <td>${g('Lorentzian', 'fwhm', 4)}</td>
+          <td>${g('Gaussian', 'fwhm', 4)}</td>
+          <td class="t">${win}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table></div>`;
+}
+
+function xTable2Theta(rows) {
+  if (!rows.length) return '';
+  return `<h2>表 2 · 2θ-θ 扫描峰位 <span class="hint">只标峰位，不出 FWHM</span></h2>
+    <div class="tablewrap"><table class="data">
+      <thead><tr>
+        <th class="l">样品</th><th>点数</th><th>2θ 范围 (°)</th><th>峰数</th>
+        <th class="l">峰位 (°)</th>
+      </tr></thead><tbody>${rows.map((it) => {
+        const r = it.res;
+        const x0 = it.x[0].toFixed(2), x1 = it.x[it.x.length - 1].toFixed(2);
+        return `<tr>
+          <td class="l">${it.name}</td>
+          <td>${r.yc.length}</td>
+          <td>${x0} – ${x1}</td>
+          <td>${r.nPeaks}</td>
+          <td class="t" style="text-align:left">${r.peakList || '—'}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table></div>`;
+}
+
+function xRenderAll(failed) {
+  const items = xstate.items;
+  const omg = items.filter((i) => i.mode !== '2theta');
+  const two = items.filter((i) => i.mode === '2theta');
+  $x('#xEmpty').classList.add('hidden');
+
+  const fw = omg.map((i) => (i.res.fits.Voigt ? i.res.fits.Voigt.fwhm : i.res.fwhmDirect));
+  const meanFw = fw.length ? fw.reduce((a, b) => a + b, 0) / fw.length : 0;
+  const nPeaks = two.reduce((a, i) => a + i.res.nPeaks, 0);
+
+  const sum = $x('#xSummary');
+  sum.classList.remove('hidden');
+  sum.innerHTML = `
+    <div class="stats">
+      <div class="stat"><b>${items.length}</b><span>曲线数</span></div>
+      <div class="stat"><b>${omg.length}</b><span>Omega（出 FWHM）</span></div>
+      <div class="stat"><b>${two.length}</b><span>2θ-θ（标峰位）</span></div>
+      <div class="stat"><b>${omg.length ? meanFw.toFixed(4) : '—'}</b><span>平均 FWHM (°)</span></div>
+      <div class="stat"><b>${two.length ? nPeaks : '—'}</b><span>2θ 总峰数</span></div>
+    </div>
+    ${failed.length ? `<p class="warn">${failed.length} 个文件解析失败：${failed.join('；')}</p>` : ''}`;
+
+  const tw = $x('#xTable');
+  tw.classList.remove('hidden');
+  tw.innerHTML = xTableOmega(omg) + xTable2Theta(two) + `
+    <p class="note">扫描类型判断顺序：xrdml 的 scanAxis → 文件名关键词 → 角度跨度（&gt;5° 视为 2θ，&lt;1.5° 视为 Omega），
+      判不出来时弹窗询问。Omega 用局部窗口拟合出 FWHM；2θ 只标峰位、纵轴取 log，不做拟合。</p>`;
+
+  const cards = $x('#xCards');
+  cards.classList.remove('hidden');
+  cards.innerHTML = '<h2>逐样品图</h2>' + items.map((it, k) => {
+    const r = it.res;
+    let sub;
+    if (it.mode === '2theta') {
+      sub = `${r.nPeaks} 个峰 ｜ ${r.peakList || '—'}`;
+    } else {
+      const fits = Object.keys(r.fits);
+      sub = fits.length
+        ? fits.map((t) => `${t} FWHM ${r.fits[t].fwhm.toFixed(4)}° R² ${r.fits[t].r2.toFixed(4)}`).join(' ｜ ')
+        : `直接半高法 FWHM ${r.fwhmDirect.toFixed(4)}°`;
+    }
+    return `<details class="card" ${k === 0 ? 'open' : ''}>
+      <summary><b>${it.name}</b><span class="sub">${it.mode === '2theta' ? '2θ-θ' : 'Omega'} ｜ ${sub}</span></summary>
+      <p class="metrics">${it.file} ｜ ${it.modeWhy}${it.scanAxis ? '（scanAxis=' + it.scanAxis + '）' : ''} ｜ ${r.method}</p>
+      <div class="figs"><figure><img loading="lazy" src="${URL.createObjectURL(it.img)}"><figcaption>${it.name} 拟合图</figcaption></figure></div>
+    </details>`;
+  }).join('');
+
+  const dl = $x('#xDown');
+  dl.classList.remove('hidden');
+  dl.innerHTML = `<h2>导出</h2>
+    <div class="btns">
+      <button id="xBtnZip" class="btn">打包 ZIP（图 + CSV + Word）</button>
+      <button id="xBtnDocx" class="btn ghost">仅 Word 报告</button>
+      <button id="xBtnCsv" class="btn ghost">仅 CSV</button>
+    </div>
+    <p class="note">Word 按 Omega / 2θ 分节：前者给 FWHM 表与拟合图，后者给峰位表与 log 图。</p>`;
+
+  $x('#xBtnZip').onclick = async () => {
+    const b = $x('#xBtnZip');
+    b.disabled = true; b.textContent = '正在打包…';
+    try {
+      const docx = await xBuildDocx();
+      download(await xBuildZip(docx), `XRD分析_${stamp()}.zip`);
+    } finally { b.disabled = false; b.textContent = '打包 ZIP（图 + CSV + Word）'; }
+  };
+  $x('#xBtnDocx').onclick = async () => {
+    const b = $x('#xBtnDocx');
+    b.disabled = true; b.textContent = '正在生成…';
+    try {
+      download(await xBuildDocx(), `XRD分析报告_${stamp()}.docx`);
+    } finally { b.disabled = false; b.textContent = '仅 Word 报告'; }
+  };
+  $x('#xBtnCsv').onclick = () => {
+    download(new Blob([xSummaryCSV()], { type: 'text/csv;charset=utf-8' }),
+      `XRD_FWHM_${stamp()}.csv`);
+  };
+
+  if (items.length) $x('#xSummary').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+/* ---------------- 导出 ---------------- */
+function xSummaryCSV() {
+  const head = ['样品', '文件', '类型', '点数', '角度范围 (°)', '主峰 (°)',
+    '峰数', '峰位 (°)', 'FWHM_direct', 'FWHM_Voigt', 'R2_Voigt',
+    'FWHM_Lorentzian', 'R2_Lorentzian', 'FWHM_Gaussian', 'R2_Gaussian',
+    '方法', '判断依据'];
+  const rows = xstate.items.map((it) => {
+    const r = it.res, f = r.fits || {};
+    const g = (k, p) => (f[k] ? f[k][p].toFixed(4) : '');
+    const two = it.mode === '2theta';
+    return [
+      it.name, it.file, two ? '2theta' : 'omega', r.yc.length,
+      (it.x[it.x.length - 1] - it.x[0]).toFixed(3),
+      two ? (r.peaks[0] ? r.peaks[0].x.toFixed(3) : '') : r.peakX.toFixed(4),
+      two ? r.nPeaks : '',
+      two ? r.peakList : '',
+      two ? '' : r.fwhmDirect.toFixed(4),
+      g('Voigt', 'fwhm'), g('Voigt', 'r2'),
+      g('Lorentzian', 'fwhm'), g('Lorentzian', 'r2'),
+      g('Gaussian', 'fwhm'), g('Gaussian', 'r2'),
+      r.method, it.modeWhy
+    ];
+  });
+  return toCSV(head, rows);
+}
+
+async function xBuildZip(docxBlob) {
+  const zip = new JSZip();
+  const root = zip.folder('XRD分析结果');
+  const figs = root.folder('figs');
+  for (const it of xstate.items) figs.file(`${it.name}_${it.mode === '2theta' ? '2theta' : 'fit'}.png`, it.img);
+  root.folder('tables').file('汇总.csv', xSummaryCSV());
+  if (docxBlob) root.file('XRD分析报告.docx', docxBlob);
+  return await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+}
+
+function xImgPara(ImageRun, Paragraph, AlignmentType, ab, w, h) {
+  return new Paragraph({
+    alignment: AlignmentType.CENTER,
+    children: [new ImageRun({ type: 'png', data: new Uint8Array(ab), transformation: { width: w, height: h } })]
+  });
+}
+
+async function xBlobToArray(blob) {
+  return await new Promise((res) => {
+    const fr = new FileReader();
+    fr.onload = () => res(fr.result);
+    fr.readAsArrayBuffer(blob);
+  });
+}
+
+async function xBuildDocx() {
+  const {
+    Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType,
+    Table, TableRow, TableCell, WidthType, ImageRun, PageBreak
+  } = docx;
+  const F = '微软雅黑';
+  const P = (text, o = {}) => new Paragraph({
+    alignment: o.center ? AlignmentType.CENTER : undefined,
+    spacing: { after: o.after == null ? 70 : o.after },
+    children: [new TextRun({ text, font: F, size: o.size || 21, bold: !!o.bold, color: o.color })]
+  });
+  const cell = (text, o = {}) => new TableCell({
+    shading: o.head ? { fill: 'EFE7DB' } : undefined,
+    children: [new Paragraph({
+      alignment: o.right ? AlignmentType.RIGHT : AlignmentType.LEFT,
+      children: [new TextRun({ text: String(text), font: F, size: 15, bold: !!o.head })]
+    })]
+  });
+  const mkTable = (headers, rows) => new Table({
+    width: { size: 9600, type: WidthType.DXA },
+    rows: [
+      new TableRow({ tableHeader: true, children: headers.map((h, i) => cell(h, { head: true, right: i > 0 })) }),
+      ...rows.map((r) => new TableRow({ children: r.map((v, i) => cell(v, { right: i > 0 })) }))
+    ]
+  });
+
+  const items = xstate.items;
+  const omg = items.filter((i) => i.mode !== '2theta');
+  const two = items.filter((i) => i.mode === '2theta');
+  const children = [];
+
+  children.push(new Paragraph({
+    alignment: AlignmentType.CENTER, spacing: { after: 80 },
+    children: [new TextRun({ text: 'XRD 数据分析报告', font: F, size: 40, bold: true })]
+  }));
+  children.push(P(`共 ${items.length} 条曲线（Omega ${omg.length} 条，2θ-θ ${two.length} 条）· 生成于 ${new Date().toLocaleString('zh-CN')}`,
+    { center: true, size: 18, color: '666666' }));
+
+  children.push(new Paragraph({ text: '一、处理条件', heading: HeadingLevel.HEADING_1, keepNext: true, spacing: { before: 240, after: 80 } }));
+  children.push(P(
+    `扫描类型：${xstate.mode === 'auto' ? '自动识别（scanAxis / 文件名 / 角度跨度）' : xstate.mode === '2theta' ? '全部按 2θ-θ' : '全部按 Omega'}；`
+    + `Omega 拟合：${xstate.fit === 'None' ? '仅直接半高法' : xstate.fit}；`
+    + `拟合窗口：${xstate.window === 'full' ? '全谱（原脚本口径）' : '主峰局部窗口'}；`
+    + `背景扣除：${xstate.bg ? 'ALS（lam=1e7，p=0.01）' : '未做'}。`, { size: 19 }));
+
+  let sec = 2;
+  if (omg.length) {
+    children.push(new Paragraph({
+      text: `${sec === 2 ? '二' : '三'}、Omega 摇摆曲线 FWHM`, heading: HeadingLevel.HEADING_1,
+      keepNext: true, spacing: { before: 240, after: 80 }
+    }));
+    children.push(mkTable(
+      ['样品', '主峰(°)', 'FWHM 直接', 'FWHM Voigt', 'R²', 'FWHM 洛伦兹', 'FWHM 高斯'],
+      omg.map((it) => {
+        const r = it.res, f = r.fits;
+        const g = (k, p, d) => (f[k] ? f[k][p].toFixed(d) : '—');
+        return [it.name, r.peakX.toFixed(3), r.fwhmDirect.toFixed(4),
+          g('Voigt', 'fwhm', 4), g('Voigt', 'r2', 4),
+          g('Lorentzian', 'fwhm', 4), g('Gaussian', 'fwhm', 4)];
+      })
+    ));
+    children.push(P('FWHM 单位与横轴一致（°）。Voigt 线宽由 Olivero 近似换算；R² 在拟合窗口内计算。',
+      { size: 16, color: '555555' }));
+    sec++;
+  }
+
+  if (two.length) {
+    children.push(new Paragraph({
+      text: `${sec === 2 ? '二' : '三'}、2θ-θ 扫描峰位`, heading: HeadingLevel.HEADING_1,
+      keepNext: true, spacing: { before: 240, after: 80 }
+    }));
+    children.push(mkTable(
+      ['样品', '2θ 范围 (°)', '峰数', '峰位 (°)'],
+      two.map((it) => {
+        const r = it.res;
+        return [it.name,
+          `${it.x[0].toFixed(2)} – ${it.x[it.x.length - 1].toFixed(2)}`,
+          r.nPeaks, r.peakList || '—'];
+      })
+    ));
+    children.push(P('2θ 扫描只标峰位，不做半高宽拟合；纵轴为对数强度。', { size: 16, color: '555555' }));
+    sec++;
+  }
+
+  children.push(new Paragraph({ children: [new PageBreak()] }));
+  children.push(new Paragraph({
+    text: `${sec === 2 ? '二' : sec === 3 ? '三' : '四'}、逐样品图`, heading: HeadingLevel.HEADING_1,
+    keepNext: true, spacing: { after: 80 }
+  }));
+  for (let k = 0; k < items.length; k++) {
+    const it = items[k];
+    if (k) children.push(new Paragraph({ children: [new PageBreak()] }));
+    const r = it.res;
+    children.push(new Paragraph({ text: it.name, heading: HeadingLevel.HEADING_2, keepNext: true, spacing: { after: 40 } }));
+    if (it.mode === '2theta') {
+      children.push(P(`${it.file} ｜ 2θ-θ 扫描 ｜ ${r.nPeaks} 个峰：${r.peakList || '—'}`,
+        { size: 18, color: '444444' }));
+    } else {
+      const fits = Object.keys(r.fits);
+      children.push(P(`${it.file} ｜ Omega ｜ 主峰 ${r.peakX.toFixed(3)}° ｜ ` + (fits.length
+        ? fits.map((t) => `${t} FWHM ${r.fits[t].fwhm.toFixed(4)}°（R² ${r.fits[t].r2.toFixed(4)}）`).join('；')
+        : `直接半高法 FWHM ${r.fwhmDirect.toFixed(4)}°`), { size: 18, color: '444444' }));
+    }
+    const ab = await xBlobToArray(it.img);
+    const w = 600, h = Math.round(w * (it.h / it.w));
+    children.push(xImgPara(ImageRun, Paragraph, AlignmentType, ab, w, h));
+  }
+
+  children.push(new Paragraph({ children: [new PageBreak()] }));
+  children.push(new Paragraph({ text: `${sec === 2 ? '二' : sec === 3 ? '三' : '四'}、方法说明`,
+    heading: HeadingLevel.HEADING_1, spacing: { after: 80 } }));
+  const notes = [
+    '.xrdml 按 XRDML 2.0–2.2 命名空间解析；扫描类型优先读 <scan scanAxis>，其次看文件名关键词，最后按角度跨度猜（>5° 判 2θ、<1.5° 判 Omega），都判不出来时询问用户。',
+    'Omega 模式：ALS 扣背景 → SG 平滑（窗宽约 1% 点数）→ 按"高度 ≥5%、突出度 ≥2%、最小间距 0.5% 点数"寻峰取主峰 → 直接半高法与 Voigt/Lorentzian/Gaussian 局部窗口拟合。',
+    '2θ 模式：不做拟合、不出 FWHM；峰位在扣除背景后的曲线上判定，纵轴为对数强度，弱峰也能看清。',
+    '直接半高法：峰两侧半高处线性插值（左右都插值）。',
+    'Voigt 的复误差函数用 Weideman(1994) 算法（36 阶），与 scipy 相对误差约 1e-14。',
+    'R² = 1 - SS_res/SS_tot，在拟合窗口内计算。'
+  ];
+  for (const t of notes) {
+    children.push(new Paragraph({
+      bullet: { level: 0 }, spacing: { after: 40 },
+      children: [new TextRun({ text: t, font: F, size: 18 })]
+    }));
+  }
+
+  const doc = new Document({
+    styles: { default: { document: { run: { font: F, size: 21 } } } },
+    sections: [{
+      properties: { page: { margin: { top: 1134, bottom: 1134, left: 1134, right: 1134 } } },
+      children
+    }]
+  });
+  const blob = await Packer.toBlob(doc);
+  xstate.docxBlob = blob;
+  return blob;
+}
+
+/* ---------------- 事件 ---------------- */
+window.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.tab').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('active', b === btn));
+      document.querySelectorAll('.pane').forEach((p) => {
+        p.classList.toggle('hidden', p.id !== 'pane-' + btn.dataset.pane);
+      });
+    });
+  });
+
+  $x('#xFile').addEventListener('change', (e) => {
+    if (e.target.files.length) xProcessFiles(e.target.files);
+    e.target.value = '';
+  });
+  $x('#xDir').addEventListener('change', (e) => {
+    if (e.target.files.length) xProcessFiles(e.target.files);
+    e.target.value = '';
+  });
+
+  const drop = $x('#xDrop');
+  ['dragenter', 'dragover'].forEach((ev) => drop.addEventListener(ev, (e) => {
+    e.preventDefault(); drop.classList.add('over');
+  }));
+  ['dragleave', 'drop'].forEach((ev) => drop.addEventListener(ev, (e) => {
+    e.preventDefault();
+    if (ev === 'dragleave' && drop.contains(e.relatedTarget)) return;
+    drop.classList.remove('over');
+  }));
+  drop.addEventListener('drop', async (e) => {
+    const files = await entriesFrom(e.dataTransfer);
+    if (files.length) xProcessFiles(files);
+  });
+
+  // 参数变化后重算（复用已读入的坐标）
+  ['#xBg', '#xFit', '#xWin', '#xRes', '#xMode'].forEach((sel) => {
+    $x(sel).addEventListener('change', async () => {
+      if (!xstate.items.length) return;
+      const cache = xstate.items.map((i) => ({ ...i }));
+      xOpts();
+      if (xstate.mode !== 'auto') xstate.modeDecision = xstate.mode;
+      xstate.items = [];
+      xsetProgress(0.2, '按新参数重算…');
+      for (let k = 0; k < cache.length; k++) {
+        const it = cache[k];
+        xsetProgress(0.2 + k / cache.length * 0.7, `(${k + 1}/${cache.length}) ${it.file}`);
+        await xtick();
+        const m = xstate.mode === 'auto'
+          ? { mode: it.mode, why: it.modeWhy }
+          : { mode: xstate.mode, why: '手动指定' };
+        const item = { ...it, mode: m.mode, modeWhy: m.why };
+        item.res = analyzeXRDCurve(item.x, item.y, {
+          mode: m.mode, background: xstate.bg, fit: xstate.fit, window: xstate.window
+        });
+        await xRenderItem(item);
+        xstate.items.push(item);
+      }
+      xsetProgress(1, '已更新');
+      setTimeout(xhideProgress, 500);
+      xRenderAll([]);
+    });
   });
 });
 
