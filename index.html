@@ -89,18 +89,18 @@ h1{font-size:29px;margin:0 0 8px;letter-spacing:.3px;font-weight:700}
 .ctl .hint b{color:var(--accent2)}
 .btn.tiny{padding:4px 10px;font-size:12.5px;border-radius:6px}
 
-/* 每张图的 scale bar 微调条 */
-.sbline{
+/* 每张图的色阶设置行 */
+.setline{
   display:flex;align-items:center;gap:8px;flex-wrap:wrap;
   margin:2px 0 0;padding:6px 16px 6px 40px;font-size:12.5px;color:var(--sub);
 }
-.sbline label{font-weight:600;color:var(--ink)}
-.sbline input{
-  width:82px;padding:4px 8px;border:1px solid #cfc4b3;border-radius:6px;
+.setline label{font-weight:600;color:var(--ink)}
+.setline input{
+  width:96px;padding:4px 8px;border:1px solid #cfc4b3;border-radius:6px;
   font:inherit;font-size:13px;color:var(--ink);background:#fff;
 }
-.sbline input:focus{outline:2px solid rgba(184,107,46,.35);border-color:var(--accent2)}
-.sbline .unit{margin-left:-4px}
+.setline input:focus{outline:2px solid rgba(184,107,46,.35);border-color:var(--accent2)}
+.setline .unit{margin-left:-4px}
 
 /* 概览 */
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin-bottom:8px}
@@ -286,10 +286,12 @@ footer .dot{opacity:.5}
   <div id="progress" class="progress hidden"><div class="bar"><i></i></div><span></span></div>
 
   <div class="ctl">
-    <label>scale bar</label>
-    <span class="hint">默认为<b>自动</b>：每张图按自己的扫描范围取约 1/4 的整齐长度（1/2/5×10ⁿ），
-      短于 1 µm 时自动改用 nm 标注。需要改时在下方每张图里单独填长度即可，只影响标注、不影响统计。</span>
-    <button id="sbarAutoAll" class="btn ghost tiny" type="button">全部恢复自动</button>
+    <label>色阶</label>
+    <span class="hint">右侧色标条的上下限（单位 nm）默认自动取本图数据的最小/最大值（如 −9.5 ~ 25.9 nm）。
+      要固定区间——比如压暗看细节、或让多张图颜色可比——就在卡片「色阶」一栏填两个 nm 数值，
+      再点该卡片的「重新生成」或这里的「重新生成图表」。只影响配色，不动任何统计值。</span>
+    <span class="hint">图内那根白色横线（scale bar）固定 <b>1 µm</b>，只作尺寸参考。</span>
+    <button id="sbarRegenAll" class="btn tiny" type="button">重新生成图表</button>
   </div>
 </section>
 
@@ -313,7 +315,7 @@ footer .dot{opacity:.5}
     </div>
     <div>
       <h3>输出</h3>
-      <p>Gwyddion 色标 + 色标条 + 自动 scale bar 的 2D/3D 图与晶粒分割／颗粒标记图，粗糙度表、晶粒表、颗粒表、尺寸分布，
+      <p>Gwyddion 色标 + 色标条 + 固定 1 µm scale bar 的 2D/3D 图与晶粒分割／颗粒标记图，粗糙度表、晶粒表、颗粒表、尺寸分布，
         Word 报告（八节，与桌面版一致），可打包成 ZIP 下载。</p>
     </div>
   </div>
@@ -322,10 +324,11 @@ footer .dot{opacity:.5}
     <li>去面只做一阶平面拟合（去样品倾斜），不做逐行滤波，因此 Ra 包含真实长波起伏。</li>
     <li><b>表面类型</b>：Ra/Rmax &lt; 0.06，或颗粒覆盖率 &gt; 0.2% 且颗粒均高 &gt; 3Ra（且颗粒数 ≥ 5），判为「平坦基底 + 孤立颗粒」，此时不出晶粒统计；其余判为「连续晶粒织构」。判定结果在表 1 里可见，悬停可看依据。</li>
     <li><b>晶粒分割</b>：σ=1 px 高斯平滑 → 归一到 0–1 → 以 0.45×P99 为阈值取高度局部极大作种子（最小间距 3 px）→ 负高度分水岭 → 面积 ≥ 12 px 计入，触边晶粒剔除。等效圆直径 2√(A/π)，长轴由二阶中心矩求得。</li>
-    <li><b>颗粒识别</b>：15 px（约 0.15 µm）高斯背景 → 相减得高通残差 → 残差 MAD 估计噪声 σ → 阈值 max(8σ, 3 nm) → 8 邻域连通域 → 面积 ≥ 6 px 计为颗粒。</li>
+    <li><b>颗粒识别</b>：15 px（约 150 nm）高斯背景 → 相减得高通残差 → 残差 MAD 估计噪声 σ → 阈值 max(8σ, 3 nm) → 8 邻域连通域 → 面积 ≥ 6 px 计为颗粒。</li>
     <li>尺寸为等效圆直径；颗粒高度为最高点相对全幅背景中位数的高度；覆盖率 = 颗粒像素占全幅比例。</li>
     <li>阈值随各图噪声自适应：平滑表面可检出数 nm 级颗粒；粗糙表面 σ 大、阈值抬高，报 0 个表示未检出高于噪声的孤立凸起，不等于表面洁净。</li>
-    <li><b>scale bar</b>：默认自动，按每张图自己的扫描范围取约 1/4 的整齐长度，短于 1 µm 改用 nm。某张图需要固定长度时，在该图卡片里填数值即可（夹在扫描范围的 2%–90%），留空恢复自动；只改标注，不影响任何统计值。</li>
+    <li><b>色阶</b>：右侧色标条的上下限，默认自动取本图数据的最小/最大值（例如 −9.5 ~ 25.9 nm）。在卡片「色阶」一栏填两个 nm 数值即可固定区间，用于压暗/提亮对比或让多张图颜色可比；留空恢复自动。只影响配色，不影响任何统计值。</li>
+    <li><b>scale bar</b>：图内那根白色横线，固定 <b>1 µm</b>（扫描范围不足 1.1 µm 时按 90% 收一点，免得画出边框），只作尺寸参考，不参与任何统计。坐标轴单位也是 µm。</li>
   </ul>
 </section>
 
@@ -21087,10 +21090,21 @@ function analyzeBuffer(buf, fileName, onStep) {
     grain = grainAnalysis(z0, d.nx, d.ny, d.pxUm);
   }
 
+  // 原始高度范围（nm）：色阶默认值，卡片里可手动指定
+  let zmn = Infinity, zmx = -Infinity;
+  for (let i = 0; i < z0.length; i++) {
+    const v = z0[i];
+    if (!isFinite(v)) continue;
+    if (v < zmn) zmn = v;
+    if (v > zmx) zmx = v;
+  }
+
   return {
     name: fileName.replace(/\.ibw$/i, '').replace(/_\d{4}$/, ''),
     nx: d.nx, ny: d.ny, scanUm: d.scanUm, pxUm: d.pxUm,
     z: z0, rs,
+    zMinNm: zmn * 1e9, zMaxNm: zmx * 1e9,
+    cbMin: null, cbMax: null,
     particles: p.recs, pstat: p.stat,
     grain, surface: cls.type, surfaceWhy: cls.why, isGrain: cls.grain,
     cover: p.stat.cover, sigma: p.stat.sigmaNm, thr: p.stat.thrNm,
@@ -21159,38 +21173,41 @@ function drawColorbar(ctx, x, y, w, h, lo, hi, unit = 'nm') {
   ctx.restore();
 }
 
-/* scale bar 长度：钳在 2%–90% 扫描范围之间，避免短到看不见或长到出框 */
-function clampBar(v, ext) {
-  let b = Number(v);
-  if (!isFinite(b) || b <= 0) b = 1;
-  const lo = ext * 0.02, hi = ext * 0.9;
-  return Math.min(hi, Math.max(lo, b));
+/* scale bar：固定 1 µm（与桌面版口径一致），只作尺寸参考。
+ * 扫描范围不足 1.1 µm 时按 90% 收一点，免得横线画出边框。 */
+function barFor(it) {
+  const ext = Number(it.scanUm);
+  if (!(ext > 0)) return 1;
+  return Math.min(1, ext * 0.9);
 }
 
-/* 自动 scale bar：按本图自己的扫描范围取约 1/4 的「整齐」长度
- * （只从 1 / 2 / 5 × 10ⁿ 里挑）。5 µm → 1 µm，2 µm → 0.5 µm，1 µm → 200 nm。
- */
-function autoBar(ext) {
-  const e = Number(ext);
-  if (!(e > 0)) return 1;
-  const target = e * 0.25;
-  const mag = Math.pow(10, Math.floor(Math.log10(target)));
-  const norm = target / mag;
-  const mult = norm >= 5 ? 5 : norm >= 2 ? 2 : 1;
-  return mult * mag;
-}
-
-/* 长度标注：不足 1 µm 时改用 nm，避免出现 0.2 µm 这种不好读的写法 */
+/* 长度标注：以 µm 为主，短于 0.1 µm 才改用 nm */
 function fmtLen(um) {
   const v = Number(um);
   if (!(v > 0)) return '—';
-  if (v < 1) return `${Math.round(v * 1000)} nm`;
-  return `${fmtUm(v)} µm`;
+  if (v < 0.1) return `${Math.round(v * 1000)} nm`;
+  return `${parseFloat(v.toFixed(2))} µm`;
 }
 
-function fmtUm(v) {
-  if (Math.abs(v - Math.round(v)) < 1e-9) return String(Math.round(v));
-  return String(parseFloat(v.toFixed(2)));
+/* 色阶范围（nm）：默认取本图数据自身的 min/max，可逐图手动指定；
+ * 只影响配色与色标条标注，不影响任何统计值 */
+function cbRange(it) {
+  let a = Number(it.zMinNm), b = Number(it.zMaxNm);
+  if (!isFinite(a) || !isFinite(b) || !(b > a)) { a = 0; b = 1; }
+  const hasLo = it.cbMin != null && isFinite(Number(it.cbMin));
+  const hasHi = it.cbMax != null && isFinite(Number(it.cbMax));
+  let lo = hasLo ? Number(it.cbMin) : a;
+  let hi = hasHi ? Number(it.cbMax) : b;
+  if (lo > hi) { const t = lo; lo = hi; hi = t; }   // 填反了自动交换
+  if (!(hi > lo)) hi = lo + 1;                     // 上下限相同则强行拉开
+  return { lo, hi, custom: hasLo || hasHi };
+}
+
+/* 色阶数值标注：高度可能是负数，保留一位小数 */
+function fmtNm(v) {
+  const x = Number(v);
+  if (!isFinite(x)) return '—';
+  return String(Math.abs(x) >= 100 ? Math.round(x) : Math.round(x * 10) / 10);
 }
 
 function fmt(v) {
@@ -21261,18 +21278,18 @@ function draw2D(canvas, item, opts = {}) {
   const px = left, py = top, pw = side, ph = side;
 
   const z = item.z;
-  let lo = Infinity, hi = -Infinity;
-  for (let i = 0; i < z.length; i++) { if (z[i] < lo) lo = z[i]; if (z[i] > hi) hi = z[i]; }
-  const lo_nm = lo * 1e9, hi_nm = hi * 1e9;
+  // 色阶范围（nm）：默认数据自身 min/max，可在卡片里手动指定
+  const cb = cbRange(item);
+  const lo_nm = cb.lo, hi_nm = cb.hi;
 
-  const img = zToImage(z, item.nx, item.ny, lo, hi);
+  const img = zToImage(z, item.nx, item.ny, lo_nm / 1e9, hi_nm / 1e9);
   drawImageData(ctx, img, px, py, pw, ph);
 
   // 边框
   ctx.strokeStyle = '#666'; ctx.lineWidth = 1;
   ctx.strokeRect(px + 0.5, py + 0.5, pw - 1, ph - 1);
 
-  // 坐标轴
+  // 坐标轴（µm）
   ctx.fillStyle = '#222'; ctx.font = FONT_S; ctx.textAlign = 'center';
   const ext = item.scanUm;
   for (let i = 0; i <= 5; i++) {
@@ -21300,8 +21317,8 @@ function draw2D(canvas, item, opts = {}) {
   // 叠加层（颗粒标记 / 晶粒边界），画在 scale bar 之下
   if (opts.overlay) opts.overlay(ctx, px, py, pw, ph);
 
-  // scale bar：默认按本图扫描范围自动选长度，传了 barUm 就按传入值
-  const sb = opts.barUm > 0 ? opts.barUm : autoBar(ext);
+  // scale bar：固定 1 µm（barFor 已在 renderItemImages 里算好并传入）
+  const sb = opts.barUm > 0 ? opts.barUm : barFor(item);
   const barPx = (sb / ext) * pw;
   drawScalebar(ctx, px + 14, py + ph - 16, barPx, ext, fmtLen(sb));
 
@@ -21399,6 +21416,7 @@ function drawGrains(canvas, item, opts = {}) {
 function draw3D(canvas, item, opts = {}) {
   const W = opts.W || 700, H = opts.H || 600;
   const ctx = setup(canvas, W, H);
+  const cb = cbRange(item);   // 与 2D 图同一色阶
 
   const n = Math.min(150, item.nx);
   const step = item.nx / n;
@@ -21497,7 +21515,7 @@ function draw3D(canvas, item, opts = {}) {
       const nl = Math.hypot(nxv, nyv, nzv);
       let sh = (nxv * lx + nyv * ly + nzv * lz) / nl;
       sh = 0.72 + 0.28 * Math.max(0, sh);
-      const c = cmap((dz - mn) / span);
+      const c = cmap((dz * 1e9 - cb.lo) / (cb.hi - cb.lo));
       quads.push({
         d: (P[(j * n + i) * 3 + 2] + P[((j + 1) * n + i + 1) * 3 + 2]) / 2,
         pts: [i0, i1, i2, i3],
@@ -21523,13 +21541,8 @@ function draw3D(canvas, item, opts = {}) {
     ctx.stroke();
   }
 
-  // 色标（用原始 z 范围，与 2D 图一致）
-  let zlo = Infinity, zhi = -Infinity;
-  for (let i = 0; i < item.z.length; i++) {
-    if (item.z[i] < zlo) zlo = item.z[i];
-    if (item.z[i] > zhi) zhi = item.z[i];
-  }
-  drawColorbar(ctx, W - 96, padT, 18, H - padT - padB, zlo * 1e9, zhi * 1e9);
+  // 色标（与 2D 图同一色阶范围）
+  drawColorbar(ctx, W - 96, padT, 18, H - padT - padB, cb.lo, cb.hi);
 
   // 底部标注扫描范围
   ctx.fillStyle = '#444'; ctx.font = FONT_S; ctx.textAlign = 'center';
@@ -21676,21 +21689,20 @@ function drawOverview(canvas, items, opts = {}) {
     const cx = 10 + (k % cols) * cellW;
     const cy = 50 + Math.floor(k / cols) * cellH;
     const side = cellW - 112;
-    let lo = Infinity, hi = -Infinity;
-    for (let i = 0; i < it.z.length; i++) { if (it.z[i] < lo) lo = it.z[i]; if (it.z[i] > hi) hi = it.z[i]; }
-    const img = zToImage(it.z, it.nx, it.ny, lo, hi);
+    const cb = cbRange(it);
+    const img = zToImage(it.z, it.nx, it.ny, cb.lo / 1e9, cb.hi / 1e9);
     drawImageData(ctx, img, cx + 4, cy + 30, side, side);
 
     ctx.strokeStyle = '#888'; ctx.lineWidth = 0.5;
     ctx.strokeRect(cx + 4.5, cy + 30.5, side - 1, side - 1);
 
-    drawColorbar(ctx, cx + side + 14, cy + 30, 12, side, lo * 1e9, hi * 1e9, '');
+    drawColorbar(ctx, cx + side + 14, cy + 30, 12, side, cb.lo, cb.hi, '');
 
     ctx.fillStyle = '#111'; ctx.font = FONT_S; ctx.textAlign = 'left';
     ctx.fillText(it.name, cx + 4, cy + 16);
 
     // Ra 左上 / scalebar 右下（每格按自己的扫描范围定长度）
-    const sb = it.barUm > 0 ? it.barUm : autoBar(it.scanUm);
+    const sb = it.barUm > 0 ? it.barUm : barFor(it);
     ctx.font = FONT_S; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
     const nFeat = it.isGrain
       ? `晶粒 ${it.grain && it.grain.stat ? it.grain.stat.n : 0}`
@@ -21722,8 +21734,16 @@ function drawOverview(canvas, items, opts = {}) {
     ctx.textBaseline = 'middle';
   });
 
-  ctx.fillStyle = '#111'; ctx.font = FONT_T; ctx.textAlign = 'center';
-  ctx.fillText('AFM 高度图总览（Gwyddion 色标 · 每格色标与 scale bar 均按自身扫描范围独立标定）', W / 2, 24);
+  // 标题：单样品时画布很窄，长标题会超出边界，按需缩字/缩短
+  ctx.fillStyle = '#111'; ctx.textAlign = 'center';
+  let ovTitle = 'AFM 高度图总览（Gwyddion 色标 · 每格色阶按各自设定 · scale bar 固定 1 µm）';
+  ctx.font = FONT_T;
+  if (ctx.measureText(ovTitle).width > W - 24) {
+    ovTitle = 'AFM 高度图总览（每格色阶独立设定）';
+    ctx.font = FONT_S;
+  }
+  if (ctx.measureText(ovTitle).width > W - 24) ovTitle = 'AFM 高度图总览';
+  ctx.fillText(ovTitle, W / 2, 24);
   return canvas;
 }
 
@@ -22888,10 +22908,7 @@ async function buildDocx(state) {
   const pts = [...new Set(items.map((i) => i.nx))].join(' / ');
   const modes = [...new Set(metas.map((m) => m.ImagingMode).filter(Boolean))].join(' / ') || '—';
   const rates = [...new Set(metas.map((m) => m.ScanRate).filter(Boolean))].join(' / ') || '—';
-  const custom = items.filter((i) => i.sbarOverride > 0);
-  const barTxt = custom.length
-    ? 'scale bar 长度部分为手动指定（' + custom.map((i) => `${i.name} ${fmtLen(i.barUm)}`).join('、') + '），其余按各自扫描范围自动选取'
-    : '全部图的 scale bar 按各自扫描范围自动选取长度';
+  const barTxt = 'scale bar 统一固定 1 µm';
   children.push(P(`扫描范围：${scans} µm ；像素：${pts} × ${pts} ；成像模式：${modes} ；扫描速率：${rates} Hz`, { size: 20 }));
   children.push(P(`高度通道为 float32 原始数据，已做一阶最小二乘去倾斜（仅去样品倾斜，不做逐行滤波），因此 Ra 包含真实长波起伏。色标为 Gwyddion 色标，${barTxt}。`, { size: 18 }));
 
@@ -22999,7 +23016,9 @@ async function buildDocx(state) {
         : ` ｜ 未检出颗粒（阈值 ${s.thrNm.toFixed(1)} nm，噪声 σ ${s.sigmaNm.toFixed(2)} nm）`;
     }
     children.push(P(line, { size: 18, color: '444444' }));
-    children.push(P(`scale bar ${fmtLen(it.barUm)}`, { size: 16, color: '888888' }));
+    const cbr = cbRange(it);
+    children.push(P(`scale bar ${fmtLen(it.barUm)} ｜ 色阶 ${fmtNm(cbr.lo)} ~ ${fmtNm(cbr.hi)} nm${cbr.custom ? '（自定义）' : ''}`,
+      { size: 16, color: '888888' }));
 
     for (const [key, ratioKey, w] of [['img2d', 'img2dRatio', 320], ['img3d', 'img3dRatio', 318], ['imgFeat', 'imgFeatRatio', 310]]) {
       const blob = it[key];
@@ -23017,10 +23036,10 @@ async function buildDocx(state) {
     '粗糙度：Ra/Rq 按全幅逐点计算；Rmax 为峰谷差；Rz 为五点法；Ssk/Sku 为偏度与峰度。',
     '表面类型判定：Ra/Rmax < 0.06，或颗粒覆盖率 > 0.2% 且颗粒均高 > 3Ra（且颗粒数 ≥ 5），判为「平坦基底 + 孤立颗粒」，此时不输出晶粒统计；其余判为「连续晶粒织构」。',
     '晶粒分割：σ=1 px 高斯平滑 → 归一到 0–1 → 以 0.45×P99 为阈值取高度局部极大作种子（最小间距 3 px）→ 负高度分水岭 → 面积 ≥ 12 px 计入，触边晶粒剔除。',
-    '颗粒识别：15 px（约 0.15 µm）高斯背景 → 原图相减得高通残差 → 由残差 MAD 估计噪声 σ（σ=1.4826·MAD）→ 阈值 max(8σ, 3 nm) → 8 邻域连通域 → 面积 ≥ 6 px 计为颗粒。',
+    '颗粒识别：15 px（约 150 nm）高斯背景 → 原图相减得高通残差 → 由残差 MAD 估计噪声 σ（σ=1.4826·MAD）→ 阈值 max(8σ, 3 nm) → 8 邻域连通域 → 面积 ≥ 6 px 计为颗粒。',
     '颗粒尺寸：等效圆直径 2√(A/π)；高度为颗粒内最高点相对全幅背景中位数的高度。',
     '阈值自适应：平滑表面 σ 小，可检出数 nm 级颗粒；粗糙表面 σ 大，阈值随之抬高。报告中「0 个」表示未检出高于噪声的孤立凸起，不等于表面洁净。',
-    'scale bar：默认按每张图自己的扫描范围取约 1/4 的整齐长度（1/2/5×10ⁿ），可在页面上逐图改为自定义值，只影响标注，不影响任何统计值。',
+    'scale bar：图内白色横线，统一固定 1 µm，只作尺寸参考，不参与任何统计。色阶（右侧色标条上下限）默认取本图数据的最小/最大值，可在页面上逐图改成固定区间，只影响配色。',
     '说明：本报告由浏览器端脚本生成，与桌面版（Python）在浮点累加顺序与分水岭实现上略有差异，统计值一般在 1% 以内一致。'
   ];
   for (const b of bullets) {
@@ -23099,11 +23118,6 @@ function setProgress(p, text) {
 }
 function hideProgress() { $('#progress').classList.add('hidden'); }
 
-/* 每张图自己的 scale bar：有自定义值就用（并钳制到 2%–90%），否则按本图扫描范围自动取 */
-function barFor(it) {
-  return it.sbarOverride > 0 ? clampBar(it.sbarOverride, it.scanUm) : autoBar(it.scanUm);
-}
-
 /* ---------- 拖放 ---------- */
 async function entriesFrom(dt) {
   const items = [...dt.items].map((i) => (i.webkitGetAsEntry ? i.webkitGetAsEntry() : null)).filter(Boolean);
@@ -23153,7 +23167,6 @@ async function processFiles(files) {
       if (used.has(nm)) nm = `${nm}_${i + 1}`;
       used.add(nm);
       it.name = nm;
-      it.sbarOverride = null;
       state.items.push(it);
     } catch (e) {
       console.warn(f.name, e);
@@ -23361,7 +23374,7 @@ function renderAll(failed, scroll = true) {
   const ov = $('#overview');
   ov.classList.remove('hidden');
   const figs = [
-    `<figure><img src="${URL.createObjectURL(state.imgOverview)}" alt="overview"><figcaption>总览（Gwyddion 色标，每格色标与 scale bar 均按自身扫描范围独立标定）</figcaption></figure>`,
+    `<figure><img src="${URL.createObjectURL(state.imgOverview)}" alt="overview"><figcaption>总览（Gwyddion 色标，每格色阶按各自设定，scale bar 固定 1 µm）</figcaption></figure>`,
     `<figure><img src="${URL.createObjectURL(state.imgBar)}" alt="bar"><figcaption>各样品 Ra / Rq 对比</figcaption></figure>`
   ];
   if (state.imgGrainDist) {
@@ -23375,7 +23388,10 @@ function renderAll(failed, scroll = true) {
   // 样品卡片
   const cards = $('#cards');
   cards.classList.remove('hidden');
-  cards.innerHTML = '<h2>逐样品图集 <span class="hint">每张图的 scale bar 可单独调整</span></h2>'
+  // 重绘后保持卡片原来的展开状态，免得改完色阶卡片自己收起来、看着像没更新
+  const prevOpen = new Set();
+  [...cards.querySelectorAll('details.card')].forEach((d, i) => { if (d.open) prevOpen.add(i); });
+  cards.innerHTML = '<h2>逐样品图集 <span class="hint">每张图的色阶（色标条上下限）可单独调，改完点该卡片的「重新生成」或顶部「重新生成图表」</span></h2>'
     + items.map((i, k) => {
       const g = i.grain && i.grain.stat;
       const s = i.pstat;
@@ -23396,18 +23412,27 @@ function renderAll(failed, scroll = true) {
         `<figure><img loading="lazy" src="${URL.createObjectURL(i.img3d)}"><figcaption>3D 形貌</figcaption></figure>`,
         `<figure><img loading="lazy" src="${URL.createObjectURL(i.imgFeat)}"><figcaption>${featCap}</figcaption></figure>`
       ].join('');
-      const custom = i.sbarOverride > 0;
-      return `<details class="card" ${k === 0 ? 'open' : ''}>
+      const cb = cbRange(i);
+      const isOpen = prevOpen.size ? prevOpen.has(k) : k === 0;
+      return `<details class="card" ${isOpen ? 'open' : ''}>
       <summary><b>${i.name}</b><span class="sub">${i.surface} ｜ ${extra}</span></summary>
       <p class="metrics">${metrics}</p>
-      <div class="sbline">
-        <label>scale bar</label>
-        <input class="sbInput" data-k="${k}" type="number" min="0" step="0.01" inputmode="decimal"
-               value="${custom ? i.sbarOverride : ''}"
-               placeholder="自动 ${fmtUm(autoBar(i.scanUm))}">
-        <span class="unit">µm</span>
-        <span class="hint">当前 ${fmtLen(i.barUm)}（${custom ? '自定义' : '自动'}）· 留空即恢复自动</span>
-        ${custom ? `<button class="btn ghost tiny" data-reset="${k}">恢复自动</button>` : ''}
+      <div class="setline">
+        <label>色阶</label>
+        <input class="cbInput" data-k="${k}" data-w="min" type="number" step="1" inputmode="decimal"
+               value="${i.cbMin != null ? i.cbMin : ''}"
+               placeholder="自动 ${fmtNm(i.zMinNm)}">
+        <span class="unit">~</span>
+        <input class="cbInput" data-k="${k}" data-w="max" type="number" step="1" inputmode="decimal"
+               value="${i.cbMax != null ? i.cbMax : ''}"
+               placeholder="自动 ${fmtNm(i.zMaxNm)}">
+        <span class="unit">nm</span>
+        <span class="hint">当前 ${fmtNm(cb.lo)} ~ ${fmtNm(cb.hi)} nm（${cb.custom ? '自定义' : '自动'}）· 只改配色，不动统计</span>
+        ${cb.custom ? `<button class="btn ghost tiny" type="button" data-resetcb="${k}">恢复自动</button>` : ''}
+      </div>
+      <div class="setline">
+        <button class="btn tiny" type="button" data-regen="${k}">重新生成</button>
+        <span class="hint">填好色阶后点这里重画这张图（顶部按钮 = 全部重画，输入框里按回车也行）· scale bar 固定 1 µm</span>
       </div>
       <div class="figs">${figList}</div>
     </details>`;
@@ -23480,42 +23505,82 @@ function stamp() {
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}`;
 }
 
-/* ---------- scale bar 逐图修改后重绘 ---------- */
+/* ---------- 色阶（或数据）改动后重绘 ---------- */
 let barTimer = null, barBusy = false, barQueue = [];
 
-function queueBarRedraw(k) {
-  if (k != null && !barQueue.includes(k)) barQueue.push(k);
+/* 读某张图的色阶两个输入框（留空 = 该项自动）；上下限填反会自动交换 */
+function readCbInput(el) {
+  if (!el || !el.dataset) return false;
+  const k = Number(el.dataset.k);
+  const it = state.items[k];
+  if (!it) return false;
+  const get = (w) => {
+    const x = document.querySelector(`#cards input.cbInput[data-k="${k}"][data-w="${w}"]`);
+    const raw = x ? (x.value || '').trim() : '';
+    if (!raw) return null;
+    const v = parseFloat(raw);
+    return isFinite(v) ? v : undefined;    // undefined = 非法，不覆盖
+  };
+  const lo = get('min'), hi = get('max');
+  if (lo === undefined || hi === undefined) return false;
+  const changed = it.cbMin !== lo || it.cbMax !== hi;
+  it.cbMin = lo;
+  it.cbMax = hi;
+  return changed;
+}
+
+/* 读卡片里第 k 张图的色阶（min + max 两个框一起读） */
+function readCbInputOf(k) {
+  const el = document.querySelector(`#cards input.cbInput[data-k="${k}"]`);
+  return el ? readCbInput(el) : false;
+}
+
+/* 立刻重绘：k 为 null 表示全部图（连同总览、分布图一起重出） */
+function regenImages(k) {
+  if (!state.items.length) return;
   clearTimeout(barTimer);
-  barTimer = setTimeout(runBarRedraw, 220);
+  if (k == null) {
+    barQueue = state.items.map((_, i) => i);
+  } else if (!barQueue.includes(k)) {
+    barQueue.push(k);
+  }
+  runBarRedraw();
 }
 
 async function runBarRedraw(all) {
   if (!state.items.length) return;
   if (barBusy) { if (all) barQueue = state.items.map((_, i) => i); return; }
-  if (all) barQueue = state.items.map((_, i) => i);
+  if (all && !barQueue.length) barQueue = state.items.map((_, i) => i);
   const ks = barQueue.slice();
   barQueue = [];
   if (!ks.length) return;
 
   barBusy = true;
-  state.docxBlob = null;
-  setProgress(0.1, '按新 scale bar 重绘…');
-  for (let n = 0; n < ks.length; n++) {
-    const it = state.items[ks[n]];
-    if (!it) continue;
-    setProgress(0.1 + (n / ks.length) * 0.65, `(${n + 1}/${ks.length}) 重绘 ${it.name}`);
+  try {
+    state.docxBlob = null;   // 图变了，Word 报告要重新生成
+    setProgress(0.1, '按新色阶重绘…');
+    for (let n = 0; n < ks.length; n++) {
+      const it = state.items[ks[n]];
+      if (!it) continue;
+      setProgress(0.1 + (n / ks.length) * 0.65, `(${n + 1}/${ks.length}) 重绘 ${it.name}`);
+      await tick();
+      await renderItemImages(it);
+    }
+    setProgress(0.85, '重新生成汇总图…');
     await tick();
-    await renderItemImages(it);
+    await renderSummaryImages();
+    state.renderSeq++;
+    renderAll(state.failed || [], false);
+    setProgress(1, '已按新色阶重新生成');
+    setTimeout(hideProgress, 500);
+  } catch (err) {
+    console.error('重绘失败', err);
+    hideProgress();
+    alert('重新生成失败：' + (err && err.message ? err.message : err));
+  } finally {
+    barBusy = false;
+    if (barQueue.length) runBarRedraw();
   }
-  setProgress(0.85, '重新生成汇总图…');
-  await tick();
-  await renderSummaryImages();
-  state.renderSeq++;
-  renderAll(state.failed, false);
-  setProgress(1, '已更新');
-  setTimeout(hideProgress, 400);
-  barBusy = false;
-  if (barQueue.length) runBarRedraw();
 }
 
 /* ---------- 事件绑定 ---------- */
@@ -23532,41 +23597,45 @@ window.addEventListener('DOMContentLoaded', () => {
     e.target.value = '';
   });
 
-  // 逐图 scale bar：改完（回车/失焦）才重绘，避免打字过程中反复重算
-  $('#cards').addEventListener('change', (e) => {
+  // 输入框里按回车 = 重画这一张（失焦不再自动重画：那会重建卡片、
+  // 把正在填的另一个输入框打断，参数反而容易填不进去）
+  $('#cards').addEventListener('keydown', (e) => {
     const el = e.target;
-    if (!el.classList || !el.classList.contains('sbInput')) return;
+    if (!el.classList || e.key !== 'Enter') return;
+    if (!el.classList.contains('cbInput')) return;
+    e.preventDefault();
     const k = Number(el.dataset.k);
-    const it = state.items[k];
-    if (!it) return;
-    const raw = (el.value || '').trim();
-    if (!raw) {
-      it.sbarOverride = null;
-    } else {
-      const v = parseFloat(raw);
-      if (!isFinite(v) || v <= 0) return;
-      it.sbarOverride = v;
-    }
-    queueBarRedraw(k);
+    readCbInputOf(k);
+    regenImages(k);
   });
 
   $('#cards').addEventListener('click', (e) => {
-    const b = e.target.closest('button[data-reset]');
-    if (!b) return;
-    const k = Number(b.dataset.reset);
-    const it = state.items[k];
-    if (!it) return;
-    it.sbarOverride = null;
-    queueBarRedraw(k);
+    // 该图卡片内的「重新生成」：先把这一张的两个设置都吃进去，再只重绘这一张
+    const regen = e.target.closest('button[data-regen]');
+    if (regen) {
+      const k = Number(regen.dataset.regen);
+      readCbInputOf(k);
+      regenImages(k);
+      return;
+    }
+    const rcb = e.target.closest('button[data-resetcb]');
+    if (rcb) {
+      const k = Number(rcb.dataset.resetcb);
+      const it = state.items[k];
+      if (!it) return;
+      it.cbMin = null;
+      it.cbMax = null;
+      regenImages(k);
+    }
   });
 
-  const autoAll = $('#sbarAutoAll');
-  if (autoAll) {
-    autoAll.addEventListener('click', () => {
-      if (!state.items.length) return;
-      state.items.forEach((i) => { i.sbarOverride = null; });
-      queueBarRedraw(null);
-      runBarRedraw(true);
+  // 顶部「重新生成图表」：读所有色阶输入框，全部图 + 总览一起重出
+  const regenAll = $('#sbarRegenAll');
+  if (regenAll) {
+    regenAll.addEventListener('click', () => {
+      if (!state.items.length) { alert('还没有数据：先拖入 .ibw 文件或整个文件夹。'); return; }
+      document.querySelectorAll('#cards input.cbInput').forEach((el) => readCbInput(el));
+      regenImages(null);
     });
   }
 
