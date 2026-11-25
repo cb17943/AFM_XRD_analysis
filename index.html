@@ -21767,6 +21767,11 @@ function drawOverview(canvas, items, opts = {}) {
 }
 
 
+/* XRD 图保持原来的字号：AFM 放大到 1.5 倍，XRD 仍用 17/13/18 */
+const XFONT = '17px "Microsoft YaHei","PingFang SC","Hiragino Sans GB",sans-serif';
+const XFONT_S = '13px "Microsoft YaHei","PingFang SC","Hiragino Sans GB",sans-serif';
+const XFONT_T = '18px "Microsoft YaHei","PingFang SC","Hiragino Sans GB",sans-serif';
+
 /* ============================================================
  * xrd-core.js — XRD（摇摆曲线 / 2θ-ω）数值核心，纯 JS 无依赖
  *   1. .xrdml / .txt(.xy) 解析
@@ -22412,7 +22417,7 @@ function analyzeXRDCurve(x, y, opt = {}) {
  * xrd-draw.js — XRD 拟合图（Canvas）
  *   主图：原始 / 背景 / 扣背景 / 各拟合曲线 + 半高线 + FWHM 标注
  *   副图：残差（可选）
- * 字体沿用 draw.js 里的 FONT / FONT_S / FONT_T
+ * 字体：XRD 独立的字号常量 XFONT / XFONT_S / XFONT_T
  * ============================================================ */
 
 function _xrdRange(arr) {
@@ -22548,13 +22553,13 @@ function drawXRDFit(canvas, item, opts = {}) {
   ctx.moveTo(padL, padT); ctx.lineTo(padL, padT + mainH);
   ctx.lineTo(W - padR, padT + mainH); ctx.stroke();
 
-  ctx.fillStyle = '#222'; ctx.font = FONT_S;
+  ctx.fillStyle = '#222'; ctx.font = XFONT_S;
   ctx.textAlign = 'center'; ctx.textBaseline = 'top';
   for (const v of xt) ctx.fillText(_fmtTick(v, xStep), mapX(v), padT + mainH + 8);
   ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
   for (const v of yt) ctx.fillText(_fmtTick(v, yStep), padL - 10, mapY(v));
 
-  ctx.fillStyle = '#222'; ctx.font = FONT;
+  ctx.fillStyle = '#222'; ctx.font = XFONT;
   ctx.textAlign = 'center'; ctx.textBaseline = 'top';
   ctx.fillText(logY ? '2θ (°)' : 'ω (°)', padL + (W - padL - padR) / 2, padT + mainH + 36);
   ctx.save();
@@ -22583,7 +22588,7 @@ function drawXRDFit(canvas, item, opts = {}) {
   // 2θ-θ 扫描：直接标每个峰的峰位（不出 FWHM）
   if (item.peaks && item.peaks.length) {
     ctx.save();
-    ctx.font = FONT_S;
+    ctx.font = XFONT_S;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
     for (const p of item.peaks) {
@@ -22656,7 +22661,7 @@ function drawXRDFit(canvas, item, opts = {}) {
     ctx.fillStyle = '#c2185b';
     ctx.fill();
 
-    ctx.font = FONT_S;
+    ctx.font = XFONT_S;
     ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
     ctx.lineWidth = 3.5;
     ctx.strokeStyle = 'rgba(255,255,255,.95)';
@@ -22685,7 +22690,7 @@ function drawXRDFit(canvas, item, opts = {}) {
   ctx.fillRect(lx0 - 8, ly0 - 6, lw, rows.length * lh + 10);
   ctx.strokeStyle = '#d8d0c4';
   ctx.strokeRect(lx0 - 8, ly0 - 6, lw, rows.length * lh + 10);
-  ctx.font = FONT_S; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ctx.font = XFONT_S; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
   rows.forEach((r, i) => {
     const yy = ly0 + i * lh + 6;
     ctx.strokeStyle = r[0]; ctx.lineWidth = 3;
@@ -22694,11 +22699,11 @@ function drawXRDFit(canvas, item, opts = {}) {
   });
 
   // 标题
-  ctx.fillStyle = '#111'; ctx.font = FONT_T;
+  ctx.fillStyle = '#111'; ctx.font = XFONT_T;
   ctx.textAlign = 'center'; ctx.textBaseline = 'top';
   ctx.fillText(opts.title || item.name, W / 2, 14);
   if (opts.subtitle) {
-    ctx.fillStyle = '#555'; ctx.font = FONT_S;
+    ctx.fillStyle = '#555'; ctx.font = XFONT_S;
     ctx.fillText(opts.subtitle, W / 2, 38);
   }
 
@@ -22730,7 +22735,7 @@ function drawXRDFit(canvas, item, opts = {}) {
     ctx.beginPath(); ctx.moveTo(padL, rMapY(0)); ctx.lineTo(W - padR, rMapY(0)); ctx.stroke();
     ctx.globalAlpha = 1;
 
-    ctx.fillStyle = '#222'; ctx.font = FONT_S;
+    ctx.fillStyle = '#222'; ctx.font = XFONT_S;
     ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
     for (const v of [rHi, 0, -rHi]) {
       ctx.fillText(_fmtTick(v, Math.abs(rHi) / 2), padL - 10, rMapY(v));
