@@ -21117,9 +21117,9 @@ function analyzeBuffer(buf, fileName, onStep) {
  * draw.js — Canvas 绘图：2D 高度图 / 3D 形貌 / 颗粒标记 / 总览 / 统计图
  * ============================================================ */
 
-const FONT = '17px "Microsoft YaHei","PingFang SC","Hiragino Sans GB",sans-serif';
-const FONT_S = '13px "Microsoft YaHei","PingFang SC",sans-serif';
-const FONT_T = '18px "Microsoft YaHei","PingFang SC",sans-serif';
+const FONT = '26px "Microsoft YaHei","PingFang SC","Hiragino Sans GB",sans-serif';
+const FONT_S = '20px "Microsoft YaHei","PingFang SC",sans-serif';
+const FONT_T = '27px "Microsoft YaHei","PingFang SC",sans-serif';
 
 function setup(canvas, w, h) {
   const dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -21169,7 +21169,7 @@ function drawColorbar(ctx, x, y, w, h, lo, hi, unit = 'nm') {
   }
   ctx.textAlign = 'center';
   ctx.font = FONT_S;
-  ctx.fillText(unit, x + w / 2, y - 12);
+  ctx.fillText(unit, x + w / 2, y - 24);
   ctx.restore();
 }
 
@@ -21208,6 +21208,16 @@ function fmtNm(v) {
   const x = Number(v);
   if (!isFinite(x)) return '—';
   return String(Math.abs(x) >= 100 ? Math.round(x) : Math.round(x * 10) / 10);
+}
+
+/* 标题太长时按画布宽度缩字号，保证不裁切 */
+function fitFont(ctx, text, maxW, font) {
+  const px = parseInt(font, 10);
+  ctx.font = font;
+  const w = ctx.measureText(text).width;
+  if (w > maxW) {
+    ctx.font = `${Math.max(12, Math.floor(px * maxW / w))}px "Microsoft YaHei","PingFang SC","Hiragino Sans GB",sans-serif`;
+  }
 }
 
 function fmt(v) {
@@ -21270,10 +21280,10 @@ function drawImageData(ctx, img, x, y, w, h) {
 
 /* ---------- 2D 高度图 ---------- */
 function draw2D(canvas, item, opts = {}) {
-  const W = opts.W || 640, H = opts.H || 592;
+  const W = opts.W || 640, H = opts.H || 620;
   const ctx = setup(canvas, W, H);
 
-  const left = 88, top = 64, right = 108, bottom = 84;
+  const left = 88, top = 96, right = 108, bottom = 84;
   const side = Math.min(W - left - right, H - top - bottom);
   const px = left, py = top, pw = side, ph = side;
 
@@ -21322,12 +21332,15 @@ function draw2D(canvas, item, opts = {}) {
   const barPx = (sb / ext) * pw;
   drawScalebar(ctx, px + 14, py + ph - 16, barPx, ext, fmtLen(sb));
 
-  // 标题
-  ctx.fillStyle = '#111'; ctx.font = FONT_T; ctx.textAlign = 'center';
-  ctx.fillText(opts.title || item.name, W / 2 - 8, 26);
+  // 标题 / 副标题：字号大，先量宽再画，避免出框
+  ctx.fillStyle = '#111'; ctx.textAlign = 'center';
+  const ttl = opts.title || item.name;
+  fitFont(ctx, ttl, 480, FONT_T);
+  ctx.fillText(ttl, W / 2 - 8, 28);
   if (opts.subtitle) {
-    ctx.font = FONT_S; ctx.fillStyle = '#555';
-    ctx.fillText(opts.subtitle, W / 2 - 8, 48);
+    fitFont(ctx, opts.subtitle, 480, FONT_S);
+    ctx.fillStyle = '#555';
+    ctx.fillText(opts.subtitle, W / 2 - 8, 66);
   }
   return canvas;
 }
@@ -21336,7 +21349,7 @@ function draw2D(canvas, item, opts = {}) {
 function drawParticles(canvas, item, opts = {}) {
   const P = item.particles || [];
   const st = item.pstat || { density: 0, dMean: 0, hMean: 0, thrNm: 0, sigmaNm: 0 };
-  const W = opts.W || 640, H = opts.H || 592;
+  const W = opts.W || 640, H = opts.H || 620;
   const sub = P.length
     ? `面密度 ${st.density.toFixed(2)} 个/µm² · 均径 ${st.dMean.toFixed(0)} nm · 均高 ${st.hMean.toFixed(1)} nm`
     : `未检出孤立颗粒（阈值 ${st.thrNm.toFixed(1)} nm · 噪声 σ ${st.sigmaNm.toFixed(2)} nm）`;
@@ -21374,7 +21387,7 @@ function drawParticles(canvas, item, opts = {}) {
 function drawGrains(canvas, item, opts = {}) {
   const g = item.grain;
   const st = g && g.stat;
-  const W = opts.W || 640, H = opts.H || 592;
+  const W = opts.W || 640, H = opts.H || 620;
   const sub = st && st.n
     ? `面密度 ${st.density.toFixed(2)} 个/µm² · 均径 ${st.dMean.toFixed(0)} nm · 中位 ${st.dMed.toFixed(0)} nm`
     : '未得到有效晶粒（分割区域全部接触边缘）';
@@ -21548,8 +21561,10 @@ function draw3D(canvas, item, opts = {}) {
   ctx.fillStyle = '#444'; ctx.font = FONT_S; ctx.textAlign = 'center';
   ctx.fillText(`${fmt(ext)} × ${fmt(ext)} µm`, ox + (x0 + x1) / 2 * sc, H - 18);
 
-  ctx.fillStyle = '#111'; ctx.font = FONT_T;
-  ctx.fillText(opts.title || (item.name + ' 3D'), W / 2 - 24, 24);
+  ctx.fillStyle = '#111';
+  const t3 = opts.title || (item.name + ' 3D');
+  fitFont(ctx, t3, W - 130, FONT_T);
+  ctx.fillText(t3, W / 2 - 24, 28);
   return canvas;
 }
 
@@ -21557,7 +21572,7 @@ function draw3D(canvas, item, opts = {}) {
 function drawHist(canvas, values, title, opts = {}) {
   const W = opts.W || 360, H = opts.H || 250;
   const ctx = setup(canvas, W, H);
-  const left = 50, bottom = 44, top = 34, right = 14;
+  const left = 50, bottom = 60, top = 34, right = 14;
   const pw = W - left - right, ph = H - top - bottom;
 
   if (!values.length) return canvas;
@@ -21592,15 +21607,17 @@ function drawHist(canvas, values, title, opts = {}) {
   const nt = 3;
   for (let i = 0; i <= nt; i++) {
     const t = i / nt, xx = left + t * pw;
+    ctx.textAlign = i === 0 ? 'left' : i === nt ? 'right' : 'center';
     ctx.fillText(fmt(mn + (mx - mn) * t), xx, top + ph + 12);
   }
   ctx.textAlign = 'center';
-  ctx.fillText(opts.xlabel || '等效圆直径 (nm)', left + pw / 2, top + ph + 32);
+  ctx.fillText(opts.xlabel || '等效圆直径 (nm)', left + pw / 2, top + ph + 38);
   ctx.textAlign = 'left';
-  ctx.fillText('计数', 2, top + 10);
+  ctx.fillText('计数', 8, top + 10);
   ctx.textAlign = 'center';
-  ctx.fillStyle = '#111'; ctx.font = FONT_S;
-  ctx.fillText(title, W / 2, 16);
+  ctx.fillStyle = '#111';
+  fitFont(ctx, title, W - 20, FONT_S);
+  ctx.fillText(title, W / 2, 18);
   return canvas;
 }
 
@@ -21608,7 +21625,7 @@ function drawHist(canvas, values, title, opts = {}) {
 function drawHistGrid(canvas, entries, opts = {}) {
   const cols = Math.min(opts.cols || 3, Math.max(1, entries.length));
   const rows = Math.ceil(entries.length / cols);
-  const cw = 372, ch = 268;
+  const cw = 372, ch = 292;
   const W = cols * cw + 24, H = rows * ch + 70;
   const ctx = setup(canvas, W, H);
   ctx.fillStyle = '#faf8f5';
@@ -21626,15 +21643,17 @@ function drawHistGrid(canvas, entries, opts = {}) {
     ctx.strokeRect(x + 0.5, y + 0.5, cw - 13, ch - 11);
   });
 
-  ctx.fillStyle = '#111'; ctx.font = FONT_T; ctx.textAlign = 'center';
-  ctx.fillText(opts.title || '颗粒尺寸分布', W / 2, 26);
+  ctx.fillStyle = '#111'; ctx.textAlign = 'center';
+  const ht = opts.title || '颗粒尺寸分布';
+  fitFont(ctx, ht, W - 24, FONT_T);
+  ctx.fillText(ht, W / 2, 28);
   return canvas;
 }
 
 function drawBar(canvas, rows, opts = {}) {
-  const W = opts.W || 960, H = opts.H || 350;
+  const W = opts.W || 960, H = opts.H || 370;
   const ctx = setup(canvas, W, H);
-  const left = 68, bottom = 94, top = 42, right = 18;
+  const left = 88, bottom = 96, top = 58, right = 18;
   const pw = W - left - right, ph = H - top - bottom;
   const n = rows.length;
   if (!n) return canvas;
@@ -21657,7 +21676,7 @@ function drawBar(canvas, rows, opts = {}) {
     ctx.fillStyle = 'rgb(242,204,140)';
     ctx.fillRect(x + bw * 0.50, top + ph - hRq, bw * 0.28, hRq);
     ctx.save();
-    ctx.translate(x + bw / 2, top + ph + 8);
+    ctx.translate(x + bw / 2, top + ph + 20);
     ctx.rotate(-Math.PI / 5);
     ctx.fillStyle = '#333'; ctx.font = FONT_S; ctx.textAlign = 'right';
     ctx.fillText(rows[i].name, 0, 0);
@@ -21666,7 +21685,7 @@ function drawBar(canvas, rows, opts = {}) {
   ctx.strokeStyle = '#666';
   ctx.beginPath(); ctx.moveTo(left, top); ctx.lineTo(left, top + ph); ctx.lineTo(left + pw, top + ph); ctx.stroke();
   ctx.fillStyle = '#222'; ctx.font = FONT_S; ctx.textAlign = 'left';
-  ctx.fillText('nm', 8, top - 12);
+  ctx.fillText('nm', 8, top - 18);
   // 图例
   ctx.fillStyle = 'rgb(184,107,46)'; ctx.fillRect(left + 8, 12, 12, 12);
   ctx.fillStyle = '#333'; ctx.fillText('Ra', left + 26, 19);
@@ -21678,7 +21697,7 @@ function drawBar(canvas, rows, opts = {}) {
 /* ---------- 总览 ---------- */
 function drawOverview(canvas, items, opts = {}) {
   const cols = opts.cols || 4;
-  const cellW = 344, cellH = 344;
+  const cellW = 344, cellH = 360;
   const rows = Math.ceil(items.length / cols);
   const W = cols * cellW + 20, H = rows * cellH + 62;
   const ctx = setup(canvas, W, H);
@@ -21691,15 +21710,15 @@ function drawOverview(canvas, items, opts = {}) {
     const side = cellW - 112;
     const cb = cbRange(it);
     const img = zToImage(it.z, it.nx, it.ny, cb.lo / 1e9, cb.hi / 1e9);
-    drawImageData(ctx, img, cx + 4, cy + 30, side, side);
+    drawImageData(ctx, img, cx + 4, cy + 68, side, side);
 
     ctx.strokeStyle = '#888'; ctx.lineWidth = 0.5;
-    ctx.strokeRect(cx + 4.5, cy + 30.5, side - 1, side - 1);
+    ctx.strokeRect(cx + 4.5, cy + 68.5, side - 1, side - 1);
 
-    drawColorbar(ctx, cx + side + 14, cy + 30, 12, side, cb.lo, cb.hi, '');
+    drawColorbar(ctx, cx + side + 14, cy + 68, 12, side, cb.lo, cb.hi, '');
 
     ctx.fillStyle = '#111'; ctx.font = FONT_S; ctx.textAlign = 'left';
-    ctx.fillText(it.name, cx + 4, cy + 16);
+    ctx.fillText(it.name, cx + 4, cy + 18);
 
     // Ra 左上 / scalebar 右下（每格按自己的扫描范围定长度）
     const sb = it.barUm > 0 ? it.barUm : barFor(it);
@@ -21708,14 +21727,15 @@ function drawOverview(canvas, items, opts = {}) {
       ? `晶粒 ${it.grain && it.grain.stat ? it.grain.stat.n : 0}`
       : `颗粒 ${it.particles ? it.particles.length : 0}`;
     const txt = `Ra ${it.rs.Ra.toFixed(2)} nm · ${nFeat}`;
+    fitFont(ctx, txt, side - 24, FONT_S);
     ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.7)';
-    ctx.strokeText(txt, cx + 10, cy + 38);
+    ctx.strokeText(txt, cx + 10, cy + 48);
     ctx.fillStyle = '#fff';
-    ctx.fillText(txt, cx + 10, cy + 38);
+    ctx.fillText(txt, cx + 10, cy + 48);
     ctx.textBaseline = 'middle';
 
     const barPx = (sb / it.scanUm) * side;
-    const bx = cx + 4 + side - barPx - 10, by = cy + 30 + side - 14;
+    const bx = cx + 4 + side - barPx - 10, by = cy + 68 + side - 14;
     ctx.strokeStyle = 'rgba(0,0,0,.7)'; ctx.lineWidth = 5;
     ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx + barPx, by); ctx.stroke();
     ctx.strokeStyle = '#fff'; ctx.lineWidth = 3;
@@ -21737,13 +21757,12 @@ function drawOverview(canvas, items, opts = {}) {
   // 标题：单样品时画布很窄，长标题会超出边界，按需缩字/缩短
   ctx.fillStyle = '#111'; ctx.textAlign = 'center';
   let ovTitle = 'AFM 高度图总览（Gwyddion 色标 · 每格色阶按各自设定 · scale bar 固定 1 µm）';
-  ctx.font = FONT_T;
-  if (ctx.measureText(ovTitle).width > W - 24) {
-    ovTitle = 'AFM 高度图总览（每格色阶独立设定）';
-    ctx.font = FONT_S;
-  }
+  fitFont(ctx, ovTitle, W - 24, FONT_T);
+  if (ctx.measureText(ovTitle).width > W - 24) ovTitle = 'AFM 高度图总览（每格色阶独立设定）';
+  fitFont(ctx, ovTitle, W - 24, FONT_S);
   if (ctx.measureText(ovTitle).width > W - 24) ovTitle = 'AFM 高度图总览';
-  ctx.fillText(ovTitle, W / 2, 24);
+  fitFont(ctx, ovTitle, W - 24, FONT_T);
+  ctx.fillText(ovTitle, W / 2, 28);
   return canvas;
 }
 
@@ -23097,6 +23116,38 @@ async function buildZip(state) {
 }
 
 
+/* 只导出图片：kind = 2d / 3d / feat / summary / all，不打 CSV、不带 Word */
+async function buildImagesZip(st, kind) {
+  const zip = new JSZip();
+  let count = 0;
+  const add = (folder, name, blob) => {
+    if (!blob) return;
+    zip.folder(folder).file(name, blob);
+    count++;
+  };
+  const all = kind === 'all';
+  if (all || kind === '2d') {
+    for (const it of st.items) add('2D高度图', `${it.name}_2D.png`, it.img2d);
+  }
+  if (all || kind === '3d') {
+    for (const it of st.items) add('3D形貌', `${it.name}_3D.png`, it.img3d);
+  }
+  if (all || kind === 'feat') {
+    for (const it of st.items) {
+      if (it.imgFeat) add('特征图', `${it.name}_${it.isGrain ? '晶粒' : '颗粒'}.png`, it.imgFeat);
+    }
+  }
+  if (all || kind === 'summary') {
+    add('汇总图', '总览_2D.png', st.imgOverview);
+    add('汇总图', '对比_Ra_Rq.png', st.imgBar);
+    add('汇总图', '晶粒尺寸分布.png', st.imgGrainDist);
+    add('汇总图', '颗粒尺寸分布.png', st.imgPartDist);
+  }
+  if (!count) return null;
+  return { blob: await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' }), count };
+}
+
+
 /* ============================================================
  * ui.js — 页面流程：读文件 → 分析 → 出图 → 导出
  * ============================================================ */
@@ -23207,7 +23258,7 @@ async function renderItemImages(it) {
 
   const c1 = document.createElement('canvas');
   draw2D(c1, it, {
-    W: 640, H: 592, barUm: it.barUm, title: it.name,
+    W: 640, H: 620, barUm: it.barUm, title: it.name,
     subtitle: `Ra ${it.rs.Ra.toFixed(2)} nm · Rq ${it.rs.Rq.toFixed(2)} nm · Rmax ${it.rs.Rmax.toFixed(1)} nm`
   });
   it.img2d = await canvasToBlob(c1);
@@ -23221,9 +23272,9 @@ async function renderItemImages(it) {
   // 晶粒织构 → 晶粒分割图；平坦基底 → 颗粒标记图
   const c3 = document.createElement('canvas');
   if (it.isGrain && it.grain && it.grain.seg) {
-    drawGrains(c3, it, { W: 640, H: 592, barUm: it.barUm });
+    drawGrains(c3, it, { W: 640, H: 620, barUm: it.barUm });
   } else {
-    drawParticles(c3, it, { W: 640, H: 592, barUm: it.barUm });
+    drawParticles(c3, it, { W: 640, H: 620, barUm: it.barUm });
   }
   it.imgFeat = await canvasToBlob(c3);
   it.imgFeatRatio = c3.height / c3.width;
@@ -23236,7 +23287,7 @@ async function renderSummaryImages() {
   state.overviewRatio = c.height / c.width;
 
   const c2 = document.createElement('canvas');
-  drawBar(c2, state.items, { W: 960, H: 350 });
+  drawBar(c2, state.items, { W: 960, H: 370 });
   state.imgBar = await canvasToBlob(c2);
 
   // 晶粒尺寸分布（仅晶粒织构测点）
@@ -23247,7 +23298,7 @@ async function renderSummaryImages() {
     drawHistGrid(c3, gItems.map((i) => ({
       name: `${i.name}（n=${i.grain.stat.n}）`,
       values: i.grain.values
-    })), { cols: Math.min(3, gItems.length), title: '晶粒尺寸分布（等效圆直径，已剔除触边晶粒）' });
+    })), { cols: Math.min(3, gItems.length), title: '晶粒尺寸分布（等效圆直径）' });
     state.imgGrainDist = await canvasToBlob(c3);
     state.grainDistRatio = c3.height / c3.width;
   }
@@ -23441,14 +23492,18 @@ function renderAll(failed, scroll = true) {
   // 下载
   const dl = $('#downloads');
   dl.classList.remove('hidden');
-  const gcsv = gItems.some((i) => i.grain && i.grain.stat && i.grain.stat.n);
   dl.innerHTML = `<h2>导出</h2>
     <div class="btns">
       <button id="btnZip" class="btn">打包 ZIP（图片 + CSV + Word）</button>
       <button id="btnDocx" class="btn ghost">仅下载 Word 报告</button>
-      <button id="btnCsv" class="btn ghost">汇总 CSV</button>
-      ${gcsv ? '<button id="btnCsvG" class="btn ghost">晶粒 CSV</button>' : ''}
-      ${pItems.length ? '<button id="btnCsvP" class="btn ghost">颗粒明细 CSV</button>' : ''}
+    </div>
+    <h3>只导出图片（ZIP，只含 PNG、不带 CSV 和 Word）</h3>
+    <div class="btns">
+      <button id="btnImg2d" class="btn ghost">全部 2D 高度图</button>
+      <button id="btnImg3d" class="btn ghost">全部 3D 形貌图</button>
+      <button id="btnImgFeat" class="btn ghost">全部晶粒 / 颗粒标记图</button>
+      <button id="btnImgSum" class="btn ghost">汇总图（总览 + 统计）</button>
+      <button id="btnImgAll" class="btn">全部图片（一起打包）</button>
     </div>
     <p class="note">Word 报告按「概览 → 主要结果 → 粗糙度 → 晶粒 → 颗粒 → 汇总图 → 逐样品 → 方法与口径」八节编排，
       与桌面版一致；晶粒与颗粒按表面类型分别成表。</p>`;
@@ -23476,20 +23531,28 @@ function renderAll(failed, scroll = true) {
       $('#btnDocx').textContent = '仅下载 Word 报告';
     }
   };
-  $('#btnCsv').onclick = () => {
-    download(new Blob([summaryCSV(items)], { type: 'text/csv;charset=utf-8' }),
-      `AFM汇总_${stamp()}.csv`);
-  };
-  if (gcsv) {
-    $('#btnCsvG').onclick = () => {
-      download(new Blob([grainCSV(items)], { type: 'text/csv;charset=utf-8' }),
-        `AFM晶粒_${stamp()}.csv`);
-    };
-  }
-  if (pItems.length) {
-    $('#btnCsvP').onclick = () => {
-      download(new Blob([particleCSV(pItems)], { type: 'text/csv;charset=utf-8' }),
-        `AFM颗粒明细_${stamp()}.csv`);
+  // 只导出图片的几个按钮
+  for (const [id, kind, label] of [
+    ['btnImg2d', '2d', '2D高度图'],
+    ['btnImg3d', '3d', '3D形貌'],
+    ['btnImgFeat', 'feat', '特征图'],
+    ['btnImgSum', 'summary', '汇总图'],
+    ['btnImgAll', 'all', '全部图片']
+  ]) {
+    const b = $('#' + id);
+    if (!b) continue;
+    b.onclick = async () => {
+      b.disabled = true;
+      const old = b.textContent;
+      b.textContent = '正在打包…';
+      try {
+        const out = await buildImagesZip(state, kind);
+        if (!out) { alert('没有可导出的图片，请先读入数据。'); return; }
+        download(out.blob, `AFM_${label}_${stamp()}.zip`);
+      } finally {
+        b.disabled = false;
+        b.textContent = old;
+      }
     };
   }
 
