@@ -133,6 +133,14 @@ figure{margin:0;background:var(--card);border:1px solid var(--line);border-radiu
 figure img{width:100%;display:block;border-radius:6px}
 figcaption{font-size:12px;color:var(--sub);text-align:center;padding-top:6px}
 
+/* 2D 图上的框选局部 */
+.cropWrap{position:relative;display:block}
+.cropMask{position:absolute;inset:0;cursor:crosshair;z-index:2}
+.cropSel{position:absolute;border:2px dashed #ffcf7a;background:rgba(255,176,54,.22);pointer-events:none;z-index:3}
+.cropTip{position:absolute;left:8px;top:8px;background:rgba(28,24,18,.78);color:#fff;font-size:11px;
+  padding:3px 7px;border-radius:5px;pointer-events:none;z-index:3}
+.cropBar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px;font-size:12px;color:var(--sub)}
+
 /* 卡片 */
 details.card{
   background:var(--card);border:1px solid var(--line);border-radius:10px;
@@ -329,6 +337,7 @@ footer .dot{opacity:.5}
     <li>阈值随各图噪声自适应：平滑表面可检出数 nm 级颗粒；粗糙表面 σ 大、阈值抬高，报 0 个表示未检出高于噪声的孤立凸起，不等于表面洁净。</li>
     <li><b>色阶</b>：右侧色标条的上下限，默认自动取本图数据的最小/最大值（例如 −9.5 ~ 25.9 nm）。在卡片「色阶」一栏填两个 nm 数值即可固定区间，用于压暗/提亮对比或让多张图颜色可比；留空恢复自动。只影响配色，不影响任何统计值。</li>
     <li><b>scale bar</b>：图内那根白色横线，固定 <b>1 µm</b>（扫描范围不足 1.1 µm 时按 90% 收一点，免得画出边框），只作尺寸参考，不参与任何统计。坐标轴单位也是 µm。</li>
+    <li><b>框选裁剪</b>：在 2D 图上可拖出任意矩形；裁剪卡片按真实横纵范围出图（x / y 轴各自标定），「裁剪尺寸」一栏可分别改宽、高，以当前中心从原始数据重新取样。</li>
   </ul>
 </section>
 
@@ -21176,7 +21185,7 @@ function drawColorbar(ctx, x, y, w, h, lo, hi, unit = 'nm') {
 /* scale bar：固定 1 µm（与桌面版口径一致），只作尺寸参考。
  * 扫描范围不足 1.1 µm 时按 90% 收一点，免得横线画出边框。 */
 function barFor(it) {
-  const ext = Number(it.scanUm);
+  const ext = Math.min(extX(it), extY(it));
   if (!(ext > 0)) return 1;
   return Math.min(1, ext * 0.9);
 }
@@ -21218,6 +21227,29 @@ function fitFont(ctx, text, maxW, font) {
   if (w > maxW) {
     ctx.font = `${Math.max(12, Math.floor(px * maxW / w))}px "Microsoft YaHei","PingFang SC","Hiragino Sans GB",sans-serif`;
   }
+}
+
+/* 矩形裁剪：横 / 纵扫描范围（µm）。普通方形数据只有 scanUm，两轴相同 */
+function extX(it) {
+  const v = Number(it.scanXUm != null ? it.scanXUm : it.scanUm);
+  return v > 0 ? v : 1;
+}
+function extY(it) {
+  const v = Number(it.scanYUm != null ? it.scanYUm : it.scanUm);
+  return v > 0 ? v : 1;
+}
+function scanLabel(it) {
+  const a = extX(it), b = extY(it);
+  return Math.abs(a - b) < 1e-6 ? fmt(a) : `${fmt(a)} × ${fmt(b)}`;
+}
+
+/* 2D 图像区：保持真实横纵比例，在可用画布内等比居中 */
+function imageRect(it, W = 640, H = 620) {
+  const left = 88, top = 96, right = 108, bottom = 84;
+  const aw = W - left - right, ah = H - top - bottom;
+  const k = Math.min(aw / extX(it), ah / extY(it));
+  const w = extX(it) * k, h = extY(it) * k;
+  return { x: left + (aw - w) / 2, y: top + (ah - h) / 2, w, h, W, H };
 }
 
 function fmt(v) {
@@ -21283,9 +21315,8 @@ function draw2D(canvas, item, opts = {}) {
   const W = opts.W || 640, H = opts.H || 620;
   const ctx = setup(canvas, W, H);
 
-  const left = 88, top = 96, right = 108, bottom = 84;
-  const side = Math.min(W - left - right, H - top - bottom);
-  const px = left, py = top, pw = side, ph = side;
+  const R = imageRect(item, W, H);
+  const px = R.x, py = R.y, pw = R.w, ph = R.h;
 
   const z = item.z;
   // 色阶范围（nm）：默认数据自身 min/max，可在卡片里手动指定
@@ -21301,7 +21332,7 @@ function draw2D(canvas, item, opts = {}) {
 
   // 坐标轴（µm）
   ctx.fillStyle = '#222'; ctx.font = FONT_S; ctx.textAlign = 'center';
-  const ext = item.scanUm;
+  const ext = extX(item), extYUm = extY(item);
   for (let i = 0; i <= 5; i++) {
     const t = i / 5;
     const xx = px + t * pw, yy = py + (1 - t) * ph;
@@ -21310,7 +21341,7 @@ function draw2D(canvas, item, opts = {}) {
     ctx.fillText(fmt(t * ext), xx, py + ph + 18);
     ctx.beginPath(); ctx.moveTo(px, yy); ctx.lineTo(px - 4, yy); ctx.stroke();
     ctx.textAlign = 'right';
-    ctx.fillText(fmt(t * ext), px - 9, yy);
+    ctx.fillText(fmt(t * extYUm), px - 9, yy);
     ctx.textAlign = 'center';
   }
   ctx.fillStyle = '#222'; ctx.font = FONT;
@@ -21361,12 +21392,12 @@ function drawParticles(canvas, item, opts = {}) {
     subtitle: sub,
     overlay(ctx, px, py, pw, ph) {
       if (!P.length) return;
-      const pxPerUm = pw / item.scanUm;
+      const pxPerUm = pw / extX(item);
       ctx.save();
       ctx.lineWidth = 1.3;
       for (const p of P) {
         const x = px + p.cxUm * pxPerUm;
-        const y = py + (item.scanUm - p.cyUm) * pxPerUm;
+        const y = py + (extY(item) - p.cyUm) * pxPerUm;
         if (x < px - 2 || x > px + pw + 2 || y < py - 2 || y > py + ph + 2) continue;
         const r = Math.max(2.2, (p.dEq / 2000) * pxPerUm);
         ctx.beginPath();
@@ -21431,96 +21462,85 @@ function draw3D(canvas, item, opts = {}) {
   const ctx = setup(canvas, W, H);
   const cb = cbRange(item);   // 与 2D 图同一色阶
 
-  const n = Math.min(150, item.nx);
-  const step = item.nx / n;
-  const grid = new Float32Array(n * n);
+  // 网格保持原始横纵比例：5 µm 扫描时约 300 格（16.7 nm/格）
+  const nx0 = Math.min(300, Math.max(2, item.nx));
+  const ny0 = Math.min(300, Math.max(2, Math.round(nx0 * item.ny / item.nx)));
+  const stepX = item.nx / nx0, stepY = item.ny / ny0;
+  const grid = new Float32Array(nx0 * ny0);
   // 块平均降采样：点取样会把高频细节变成尖刺
-  for (let j = 0; j < n; j++) {
-    const y0 = Math.floor(j * step), y1 = Math.max(y0 + 1, Math.floor((j + 1) * step));
-    for (let i = 0; i < n; i++) {
-      const x0 = Math.floor(i * step), x1 = Math.max(x0 + 1, Math.floor((i + 1) * step));
+  for (let j = 0; j < ny0; j++) {
+    const ya = Math.floor(j * stepY), yb = Math.max(ya + 1, Math.floor((j + 1) * stepY));
+    for (let i = 0; i < nx0; i++) {
+      const xa = Math.floor(i * stepX), xb = Math.max(xa + 1, Math.floor((i + 1) * stepX));
       let acc = 0, cnt = 0;
-      for (let y = y0; y < Math.min(y1, item.ny); y++) {
+      for (let y = ya; y < Math.min(yb, item.ny); y++) {
         const row = y * item.nx;
-        for (let x = x0; x < Math.min(x1, item.nx); x++) { acc += item.z[row + x]; cnt++; }
+        for (let x = xa; x < Math.min(xb, item.nx); x++) { acc += item.z[row + x]; cnt++; }
       }
-      grid[j * n + i] = cnt ? acc / cnt : 0;
+      grid[j * nx0 + i] = cnt ? acc / cnt : 0;
     }
   }
-  // 两次 3×3 平滑，让面看起来圆润
-  const sm = new Float32Array(n * n);
-  let src2 = grid;
-  for (let j = 0; j < n; j++) {
-    for (let i = 0; i < n; i++) {
-      let s = 0, c = 0;
-      for (let dy = -1; dy <= 1; dy++) {
-        const yy = j + dy; if (yy < 0 || yy >= n) continue;
-        for (let dx = -1; dx <= 1; dx++) {
-          const xx = i + dx; if (xx < 0 || xx >= n) continue;
-          s += grid[yy * n + xx]; c++;
-        }
-      }
-      sm[j * n + i] = s / c;
-    }
-  }
-  for (let pass = 0; pass < 6; pass++) {
-    const tmp = new Float32Array(n * n);
-    for (let j = 0; j < n; j++) {
-      for (let i = 0; i < n; i++) {
-        let s2 = 0, c2 = 0;
+  // 4 次 3×3 平滑：压掉像素噪声，同时保住几十 nm 的孤立凸起
+  let sm = grid;
+  for (let pass = 0; pass < 4; pass++) {
+    const tmp = new Float32Array(sm.length);
+    for (let j = 0; j < ny0; j++) {
+      for (let i = 0; i < nx0; i++) {
+        let acc = 0, cnt = 0;
         for (let dy = -1; dy <= 1; dy++) {
-          const yy = j + dy; if (yy < 0 || yy >= n) continue;
+          const yy = j + dy; if (yy < 0 || yy >= ny0) continue;
           for (let dx = -1; dx <= 1; dx++) {
-            const xx = i + dx; if (xx < 0 || xx >= n) continue;
-            s2 += sm[yy * n + xx]; c2++;
+            const xx = i + dx; if (xx < 0 || xx >= nx0) continue;
+            acc += sm[yy * nx0 + xx]; cnt++;
           }
         }
-        tmp[j * n + i] = s2 / c2;
+        tmp[j * nx0 + i] = acc / cnt;
       }
     }
-    sm.set(tmp);
+    sm = tmp;
   }
   let mn = Infinity, mx = -Infinity;
   for (let i = 0; i < sm.length; i++) { if (sm[i] < mn) mn = sm[i]; if (sm[i] > mx) mx = sm[i]; }
   const span = (mx - mn) || 1;
 
-  const ext = item.scanUm;
+  const ex = extX(item), ey = extY(item);
   const az = -125 * Math.PI / 180, el = 42 * Math.PI / 180;
   const zex = 0.30;                    // 纵向夸张
+  const eshort = Math.min(ex, ey);     // 高度夸张按短边，避免细长裁剪被拉歪
   const ca = Math.cos(az), sa = Math.sin(az), ce = Math.cos(el), se = Math.sin(el);
 
-  const P = new Float32Array(n * n * 3);
-  for (let j = 0; j < n; j++) {
-    for (let i = 0; i < n; i++) {
-      const X = (i / (n - 1) - 0.5) * ext;
-      const Y = (j / (n - 1) - 0.5) * ext;
-      const Z = ((sm[j * n + i] - mn) / span - 0.5) * ext * zex;
+  const P = new Float32Array(nx0 * ny0 * 3);
+  for (let j = 0; j < ny0; j++) {
+    for (let i = 0; i < nx0; i++) {
+      const X = (i / (nx0 - 1) - 0.5) * ex;
+      const Y = (j / (ny0 - 1) - 0.5) * ey;
+      const Z = ((sm[j * nx0 + i] - mn) / span - 0.5) * eshort * zex;
       const xr = X * ca - Y * sa;
       const yr = X * sa + Y * ca;
-      const o = (j * n + i) * 3;
+      const o = (j * nx0 + i) * 3;
       P[o] = xr;
       P[o + 1] = yr * se - Z * ce;
       P[o + 2] = yr * ce + Z * se;
     }
   }
   // 归一化到画布
-  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
-  for (let i = 0; i < n * n; i++) {
+  let xlo = Infinity, xhi = -Infinity, ylo = Infinity, yhi = -Infinity;
+  for (let i = 0; i < nx0 * ny0; i++) {
     const o = i * 3;
-    if (P[o] < x0) x0 = P[o]; if (P[o] > x1) x1 = P[o];
-    if (P[o + 1] < y0) y0 = P[o + 1]; if (P[o + 1] > y1) y1 = P[o + 1];
+    if (P[o] < xlo) xlo = P[o]; if (P[o] > xhi) xhi = P[o];
+    if (P[o + 1] < ylo) ylo = P[o + 1]; if (P[o + 1] > yhi) yhi = P[o + 1];
   }
   const padL = 46, padT = 52, padR = 132, padB = 58;
-  const sc = Math.min((W - padL - padR) / (x1 - x0), (H - padT - padB) / (y1 - y0));
-  const ox = padL + (W - padL - padR - (x1 - x0) * sc) / 2 - x0 * sc;
-  const oy = padT + (H - padT - padB - (y1 - y0) * sc) / 2 - y0 * sc;
+  const sc = Math.min((W - padL - padR) / (xhi - xlo), (H - padT - padB) / (yhi - ylo));
+  const ox = padL + (W - padL - padR - (xhi - xlo) * sc) / 2 - xlo * sc;
+  const oy = padT + (H - padT - padB - (yhi - ylo) * sc) / 2 - ylo * sc;
 
-  // 四边形按深度排序
+  // 四边形按深度排序：z' 越大离相机越近，升序 = 远的先画
   const lx = 0.4, ly = -0.5, lz = 0.76;  // 光方向
   const quads = [];
-  for (let j = 0; j < n - 1; j++) {
-    for (let i = 0; i < n - 1; i++) {
-      const i0 = j * n + i, i1 = j * n + i + 1, i2 = (j + 1) * n + i + 1, i3 = (j + 1) * n + i;
+  for (let j = 0; j < ny0 - 1; j++) {
+    for (let i = 0; i < nx0 - 1; i++) {
+      const i0 = j * nx0 + i, i1 = i0 + 1, i2 = (j + 1) * nx0 + i + 1, i3 = (j + 1) * nx0 + i;
       const dz = (sm[i0] + sm[i1] + sm[i2] + sm[i3]) / 4;
       const gx = (sm[i1] + sm[i2] - sm[i0] - sm[i3]) / 2;
       const gy = (sm[i3] + sm[i2] - sm[i0] - sm[i1]) / 2;
@@ -21530,13 +21550,13 @@ function draw3D(canvas, item, opts = {}) {
       sh = 0.72 + 0.28 * Math.max(0, sh);
       const c = cmap((dz * 1e9 - cb.lo) / (cb.hi - cb.lo));
       quads.push({
-        d: (P[(j * n + i) * 3 + 2] + P[((j + 1) * n + i + 1) * 3 + 2]) / 2,
+        d: (P[i0 * 3 + 2] + P[i2 * 3 + 2]) / 2,
         pts: [i0, i1, i2, i3],
         col: `rgb(${Math.min(255, c[0] * sh) | 0},${Math.min(255, c[1] * sh) | 0},${Math.min(255, c[2] * sh) | 0})`
       });
     }
   }
-  quads.sort((a, b) => b.d - a.d);   // 远的先画
+  quads.sort((a, b) => a.d - b.d);
 
   ctx.lineJoin = 'round';
   for (const q of quads) {
@@ -21559,7 +21579,7 @@ function draw3D(canvas, item, opts = {}) {
 
   // 底部标注扫描范围
   ctx.fillStyle = '#444'; ctx.font = FONT_S; ctx.textAlign = 'center';
-  ctx.fillText(`${fmt(ext)} × ${fmt(ext)} µm`, ox + (x0 + x1) / 2 * sc, H - 18);
+  ctx.fillText(`${fmt(ex)} × ${fmt(ey)} µm`, ox + (xlo + xhi) / 2 * sc, H - 18);
 
   ctx.fillStyle = '#111';
   const t3 = opts.title || (item.name + ' 3D');
@@ -21710,10 +21730,13 @@ function drawOverview(canvas, items, opts = {}) {
     const side = cellW - 112;
     const cb = cbRange(it);
     const img = zToImage(it.z, it.nx, it.ny, cb.lo / 1e9, cb.hi / 1e9);
-    drawImageData(ctx, img, cx + 4, cy + 68, side, side);
+    const kScale = Math.min(side / extX(it), side / extY(it));
+    const iw = extX(it) * kScale, ih = extY(it) * kScale;
+    const ix = cx + 4 + (side - iw) / 2, iy = cy + 68 + (side - ih) / 2;
+    drawImageData(ctx, img, ix, iy, iw, ih);
 
     ctx.strokeStyle = '#888'; ctx.lineWidth = 0.5;
-    ctx.strokeRect(cx + 4.5, cy + 68.5, side - 1, side - 1);
+    ctx.strokeRect(ix + 0.5, iy + 0.5, iw - 1, ih - 1);
 
     drawColorbar(ctx, cx + side + 14, cy + 68, 12, side, cb.lo, cb.hi, '');
 
@@ -21734,8 +21757,8 @@ function drawOverview(canvas, items, opts = {}) {
     ctx.fillText(txt, cx + 10, cy + 48);
     ctx.textBaseline = 'middle';
 
-    const barPx = (sb / it.scanUm) * side;
-    const bx = cx + 4 + side - barPx - 10, by = cy + 68 + side - 14;
+    const barPx = (sb / extX(it)) * iw;
+    const bx = ix + iw - barPx - 10, by = iy + ih - 14;
     ctx.strokeStyle = 'rgba(0,0,0,.7)'; ctx.lineWidth = 5;
     ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx + barPx, by); ctx.stroke();
     ctx.strokeStyle = '#fff'; ctx.lineWidth = 3;
@@ -21746,8 +21769,8 @@ function drawOverview(canvas, items, opts = {}) {
     const tw = ctx.measureText(sbTxt).width;
     // 短 bar 时文字比 bar 宽，需夹在面板内
     let tx = bx + barPx / 2;
-    tx = Math.min(tx, cx + 4 + side - 8 - tw / 2);
-    tx = Math.max(tx, cx + 4 + 8 + tw / 2);
+    tx = Math.min(tx, ix + iw - 8 - tw / 2);
+    tx = Math.max(tx, ix + 8 + tw / 2);
     ctx.strokeText(sbTxt, tx, by - 4);
     ctx.fillStyle = '#fff';
     ctx.fillText(sbTxt, tx, by - 4);
@@ -22785,7 +22808,7 @@ function toCSV(headers, rows) {
 
 /* ---------- CSV ---------- */
 function summaryCSV(items) {
-  const head = ['样品', '表面类型', '扫描范围 (µm)', 'Ra (nm)', 'Rq (nm)', 'Rmax (nm)',
+  const head = ['样品', '表面类型', '扫描范围 X×Y (µm)', 'Ra (nm)', 'Rq (nm)', 'Rmax (nm)',
     'Rz (nm)', 'Ssk', 'Sku',
     '晶粒数', '晶粒均径 (nm)', '晶粒中位 (nm)', '晶粒 CV', '晶粒面密度 (个/µm²)',
     '颗粒数', '颗粒面密度 (个/µm²)', '颗粒均径 (nm)', '颗粒均高 (nm)',
@@ -22796,7 +22819,7 @@ function summaryCSV(items) {
     const f = (v, d) => (s.n ? v.toFixed(d) : '');
     const gf = (v, d) => (g ? v.toFixed(d) : '');
     return [
-      i.name, i.surface, i.scanUm,
+      i.name, i.surface, scanLabel(i),
       i.rs.Ra.toFixed(3), i.rs.Rq.toFixed(3), i.rs.Rmax.toFixed(2), i.rs.Rz.toFixed(2),
       i.rs.Ssk.toFixed(2), i.rs.Sku.toFixed(2),
       g ? g.n : 0, gf(g ? g.dMean : 0, 1), gf(g ? g.dMed : 0, 1), gf(g ? g.cv : 0, 3),
@@ -22905,7 +22928,7 @@ async function buildDocx(state) {
   const grainItems = items.filter((i) => i.isGrain && i.grain && i.grain.stat && i.grain.stat.n);
   const partItems = items.filter((i) => !i.isGrain);
   const totalP = partItems.reduce((a, i) => a + i.particles.length, 0);
-  const totalArea = partItems.reduce((a, i) => a + i.scanUm * i.scanUm, 0) || 1;
+  const totalArea = partItems.reduce((a, i) => a + extX(i) * extY(i), 0) || 1;
 
   const children = [];
   const CN = ['一', '二', '三', '四', '五', '六', '七', '八', '九'];
@@ -22928,8 +22951,8 @@ async function buildDocx(state) {
   /* ---- 一、数据概览 ---- */
   H1('数据概览');
   const metas = items.map((i) => i.meta);
-  const scans = [...new Set(items.map((i) => i.scanUm))].join(' / ');
-  const pts = [...new Set(items.map((i) => i.nx))].join(' / ');
+  const scans = [...new Set(items.map((i) => scanLabel(i)))].join(' / ');
+  const pts = [...new Set(items.map((i) => `${i.nx}×${i.ny}`))].join(' / ');
   const modes = [...new Set(metas.map((m) => m.ImagingMode).filter(Boolean))].join(' / ') || '—';
   const rates = [...new Set(metas.map((m) => m.ScanRate).filter(Boolean))].join(' / ') || '—';
   const barTxt = 'scale bar 统一固定 1 µm';
@@ -23028,7 +23051,7 @@ async function buildDocx(state) {
     const it = items[k];
     if (k) children.push(new Paragraph({ children: [new PageBreak()] }));
     children.push(new Paragraph({ text: it.name, heading: HeadingLevel.HEADING_2, keepNext: true, spacing: { after: 40 } }));
-    let line = `Ra ${it.rs.Ra.toFixed(2)} nm · Rq ${it.rs.Rq.toFixed(2)} nm · `
+    let line = `扫描 ${scanLabel(it)} µm ｜ Ra ${it.rs.Ra.toFixed(2)} nm · Rq ${it.rs.Rq.toFixed(2)} nm · `
       + `Rmax ${it.rs.Rmax.toFixed(1)} nm · Rz ${it.rs.Rz.toFixed(1)} nm ｜ ${it.surface}`;
     if (it.isGrain && it.grain && it.grain.stat && it.grain.stat.n) {
       const g = it.grain.stat;
@@ -23160,7 +23183,7 @@ async function buildImagesZip(st, kind) {
 const state = {
   items: [], imgOverview: null, imgBar: null, imgGrainDist: null, imgPartDist: null,
   docxBlob: null, overviewRatio: 1, grainDistRatio: 1, partDistRatio: 1,
-  rootLabel: '本地文件', failed: [], renderSeq: 0
+  rootLabel: '本地文件', failed: [], renderSeq: 0, forceOpen: -1
 };
 
 const $ = (s) => document.querySelector(s);
@@ -23173,6 +23196,161 @@ function setProgress(p, text) {
   box.querySelector('span').textContent = text || '';
 }
 function hideProgress() { $('#progress').classList.add('hidden'); }
+
+/* ---------- 2D 图框选局部：按数据像素区间生成新的分析结果 ---------- */
+/* 注意：传入的 z 已做过一阶去倾斜，裁剪后沿用同一基准，不再重复去面 */
+function makeCropItem(src, x0, x1, y0, y1, keep) {
+  const w = x1 - x0, h = y1 - y0;
+  const z = new Float64Array(w * h);
+  for (let j = 0; j < h; j++) {
+    for (let i = 0; i < w; i++) z[j * w + i] = src.z[(y0 + j) * src.nx + x0 + i];
+  }
+  const pxUm = Number(src.pxUm) > 0 ? src.pxUm : extX(src) / src.nx;
+  const scanXUm = pxUm * w, scanYUm = pxUm * h;
+  const rs = roughStats(z);
+  const pd = detectParticles(z, w, h, pxUm);
+  const cls = classifySurface(rs, pd.recs, pd.stat.cover);
+  let grain = null;
+  if (cls.grain) grain = grainAnalysis(z, w, h, pxUm);
+  let zmn = Infinity, zmx = -Infinity;
+  for (let n = 0; n < z.length; n++) {
+    const v = z[n];
+    if (!isFinite(v)) continue;
+    if (v < zmn) zmn = v;
+    if (v > zmx) zmx = v;
+  }
+  let nm = keep && keep.name ? keep.name : src.name + '_裁剪';
+  if (!(keep && keep.name)) {
+    let sn = 2;
+    while (state.items.some((i) => i.name === nm)) nm = src.name + '_裁剪' + (sn++);
+  }
+  return {
+    name: nm, nx: w, ny: h, scanUm: scanXUm, scanXUm, scanYUm, pxUm, z, rs,
+    particles: pd.recs, pstat: pd.stat,
+    cover: pd.stat.cover, sigma: pd.stat.sigmaNm, thr: pd.stat.thrNm,
+    grain, surface: cls.type, surfaceWhy: cls.why, isGrain: cls.grain,
+    zMinNm: zmn * 1e9, zMaxNm: zmx * 1e9,
+    cbMin: keep ? keep.cbMin : null, cbMax: keep ? keep.cbMax : null,
+    isCrop: true, cropSource: keep && keep.cropSource ? keep.cropSource : src,
+    cropRect: { x0, x1, y0, y1 }, cropCenter: { x: (x0 + x1) / 2, y: (y0 + y1) / 2 },
+    cropParent: src.name, meta: src.meta
+  };
+}
+
+/* 裁剪卡片改尺寸：仍从原始数据的同一中心重新取样 */
+async function resizeCrop(k, wUm, hUm) {
+  const it = state.items[k];
+  if (!it || !it.isCrop || !it.cropSource) { alert('这不是裁剪卡片，不能改尺寸。'); return; }
+  const src = it.cropSource;
+  const pxUm = Number(src.pxUm) > 0 ? src.pxUm : extX(src) / src.nx;
+  let w = Math.round(Number(wUm) / pxUm), h = Math.round(Number(hUm) / pxUm);
+  if (!isFinite(w) || !isFinite(h) || w < 16 || h < 16) {
+    alert('宽和高至少 16 个像素（5 µm 原始图约 0.16 µm）。');
+    return;
+  }
+  w = Math.min(w, src.nx); h = Math.min(h, src.ny);
+  const cx = it.cropCenter ? it.cropCenter.x : src.nx / 2;
+  const cy = it.cropCenter ? it.cropCenter.y : src.ny / 2;
+  const x0 = Math.max(0, Math.min(src.nx - w, Math.round(cx - w / 2)));
+  const y0 = Math.max(0, Math.min(src.ny - h, Math.round(cy - h / 2)));
+  setProgress(0.1, '按新尺寸重新分析…');
+  await tick();
+  let ni;
+  try {
+    ni = makeCropItem(src, x0, x0 + w, y0, y0 + h, it);
+  } catch (err) {
+    hideProgress();
+    alert('重新裁剪失败：' + (err && err.message ? err.message : err));
+    return;
+  }
+  ni.name = it.name;
+  state.items[k] = ni;
+  state.forceOpen = k;
+  state.docxBlob = null;
+  setProgress(0.5, `正在绘制 ${ni.name}…`);
+  await tick();
+  try {
+    await renderItemImages(ni);
+    setProgress(0.85, '重新生成汇总图…');
+    await tick();
+    await renderSummaryImages();
+    renderAll(state.failed || [], false);
+    setProgress(1, `已改为 ${scanLabel(ni)} µm`);
+    setTimeout(hideProgress, 500);
+  } catch (err) {
+    hideProgress();
+    console.error('重新裁剪失败', err);
+    alert('重新裁剪失败：' + (err && err.message ? err.message : err));
+  }
+}
+
+/* 显示坐标 → 2D 图画布逻辑坐标（与 draw2D 共用同一个图像区算法） */
+const CROP_CANVAS = { W: 640, H: 620 };
+function cropBox(it) {
+  const R = imageRect(it, CROP_CANVAS.W, CROP_CANVAS.H);
+  return { L: R.x, T: R.y, R: R.x + R.w, B: R.y + R.h, pw: R.w, ph: R.h };
+}
+function cropCanvasXY(e, img) {
+  const r = img.getBoundingClientRect();
+  return {
+    x: (e.clientX - r.left) / r.width * CROP_CANVAS.W,
+    y: (e.clientY - r.top) / r.height * CROP_CANVAS.H
+  };
+}
+
+/* 应用框选：新增裁剪卡片，原卡片保留 */
+async function applyCrop(k, x0, x1, y0, y1) {
+  const src = state.items[k];
+  if (!src) return;
+  if (x1 - x0 < 16 || y1 - y0 < 16) { alert('选区太小，请至少框选 16×16 个像素（约 150×150 nm）。'); return; }
+  setProgress(0.1, '正在分析框选区域…');
+  await tick();
+  let it;
+  try {
+    it = makeCropItem(src, x0, x1, y0, y1);
+  } catch (err) {
+    hideProgress();
+    alert('裁剪分析失败：' + (err && err.message ? err.message : err));
+    return;
+  }
+  state.items.splice(k + 1, 0, it);
+  state.forceOpen = state.items.indexOf(it);   // 新裁剪卡片自动展开
+  state.docxBlob = null;
+  setProgress(0.5, `正在绘制 ${it.name}…`);
+  await tick();
+  try {
+    await renderItemImages(it);
+    setProgress(0.85, '重新生成汇总图…');
+    await tick();
+    await renderSummaryImages();
+    renderAll(state.failed || [], false);
+    setProgress(1, '已生成裁剪卡片');
+    setTimeout(hideProgress, 500);
+  } catch (err) {
+    hideProgress();
+    console.error('裁剪重绘失败', err);
+    alert('裁剪重绘失败：' + (err && err.message ? err.message : err));
+  }
+}
+
+/* 删除一张裁剪卡片 */
+async function removeCrop(k) {
+  const it = state.items[k];
+  if (!it || !it.isCrop) return;
+  state.items.splice(k, 1);
+  state.docxBlob = null;
+  setProgress(0.4, '重新生成汇总图…');
+  await tick();
+  try {
+    await renderSummaryImages();
+    renderAll(state.failed || [], false);
+    setProgress(1, '已删除');
+    setTimeout(hideProgress, 400);
+  } catch (err) {
+    hideProgress();
+    console.error(err);
+  }
+}
 
 /* ---------- 拖放 ---------- */
 async function entriesFrom(dt) {
@@ -23336,7 +23514,7 @@ function renderAll(failed, scroll = true) {
   // 概览
   const sum = $('#summary');
   sum.classList.remove('hidden');
-  const scans = [...new Set(items.map((i) => i.scanUm))].join(' / ');
+  const scans = [...new Set(items.map((i) => scanLabel(i)))].join(' / ');
   sum.innerHTML = `
     <div class="stats">
       <div class="stat"><b>${items.length}</b><span>测点</span></div>
@@ -23464,12 +23642,16 @@ function renderAll(failed, scroll = true) {
       }
       const featCap = i.isGrain ? '晶粒分割' : '颗粒标记';
       const figList = [
-        `<figure><img loading="lazy" src="${URL.createObjectURL(i.img2d)}"><figcaption>2D 高度图</figcaption></figure>`,
+        `<figure><div class="cropWrap" data-crop="${k}">
+          <img loading="lazy" src="${URL.createObjectURL(i.img2d)}">
+          <div class="cropMask"></div><div class="cropSel hidden"></div><div class="cropTip hidden"></div>
+        </div><figcaption>2D 高度图（${scanLabel(i)} µm）· 拖拽框选局部</figcaption>
+        <div class="cropBar hidden" data-cropbar="${k}"></div></figure>`,
         `<figure><img loading="lazy" src="${URL.createObjectURL(i.img3d)}"><figcaption>3D 形貌</figcaption></figure>`,
         `<figure><img loading="lazy" src="${URL.createObjectURL(i.imgFeat)}"><figcaption>${featCap}</figcaption></figure>`
       ].join('');
       const cb = cbRange(i);
-      const isOpen = prevOpen.size ? prevOpen.has(k) : k === 0;
+      const isOpen = prevOpen.size ? (prevOpen.has(k) || k === state.forceOpen) : (k === 0 || k === state.forceOpen);
       return `<details class="card" ${isOpen ? 'open' : ''}>
       <summary><b>${i.name}</b><span class="sub">${i.surface} ｜ ${extra}</span></summary>
       <p class="metrics">${metrics}</p>
@@ -23488,8 +23670,20 @@ function renderAll(failed, scroll = true) {
       </div>
       <div class="setline">
         <button class="btn tiny" type="button" data-regen="${k}">重新生成</button>
+        ${i.isCrop ? `<button class="btn ghost tiny" type="button" data-delcrop="${k}">删除这张裁剪卡片</button>` : ''}
         <span class="hint">填好色阶后点这里重画这张图（顶部按钮 = 全部重画，输入框里按回车也行）· scale bar 固定 1 µm</span>
       </div>
+      ${i.isCrop ? `<div class="setline">
+        <label>裁剪尺寸</label>
+        <input class="dimInput" data-k="${k}" data-w="w" type="number" step="0.01" min="0.16"
+               value="${extX(i).toFixed(2)}" inputmode="decimal">
+        <span class="unit">×</span>
+        <input class="dimInput" data-k="${k}" data-w="h" type="number" step="0.01" min="0.16"
+               value="${extY(i).toFixed(2)}" inputmode="decimal">
+        <span class="unit">µm</span>
+        <button class="btn tiny" type="button" data-cropresize="${k}">按尺寸重裁</button>
+        <span class="hint">以当前中心为准，横 / 纵可分别改；最小 16 px</span>
+      </div>` : ''}
       <div class="figs">${figList}</div>
     </details>`;
     }).join('');
@@ -23561,6 +23755,7 @@ function renderAll(failed, scroll = true) {
     };
   }
 
+  state.forceOpen = -1;
   if (scroll) {
     const top = document.getElementById('summary');
     if (top) top.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -23670,6 +23865,14 @@ window.addEventListener('DOMContentLoaded', () => {
   $('#cards').addEventListener('keydown', (e) => {
     const el = e.target;
     if (!el.classList || e.key !== 'Enter') return;
+    if (el.classList.contains('dimInput')) {
+      e.preventDefault();
+      const k = Number(el.dataset.k);
+      resizeCrop(k,
+        document.querySelector(`#cards input.dimInput[data-k="${k}"][data-w="w"]`).value,
+        document.querySelector(`#cards input.dimInput[data-k="${k}"][data-w="h"]`).value);
+      return;
+    }
     if (!el.classList.contains('cbInput')) return;
     e.preventDefault();
     const k = Number(el.dataset.k);
@@ -23678,6 +23881,37 @@ window.addEventListener('DOMContentLoaded', () => {
   });
 
   $('#cards').addEventListener('click', (e) => {
+    // 裁剪卡片：按新宽高从原始数据重裁
+    const rz = e.target.closest('button[data-cropresize]');
+    if (rz) {
+      const k = Number(rz.dataset.cropresize);
+      const w = document.querySelector(`#cards input.dimInput[data-k="${k}"][data-w="w"]`);
+      const h = document.querySelector(`#cards input.dimInput[data-k="${k}"][data-w="h"]`);
+      if (w && h) resizeCrop(k, w.value, h.value);
+      return;
+    }
+    // 框选工具条：生成裁剪卡片 / 取消
+    const ap = e.target.closest('button[data-cropapply]');
+    if (ap) {
+      const bar = ap.closest('.cropBar');
+      const c = bar && bar._crop;
+      if (!c) return;
+      applyCrop(c.k, c.x0, c.x1, c.y0, c.y1);
+      return;
+    }
+    if (e.target.closest('button[data-cropcancel]')) {
+      const bar = e.target.closest('.cropBar');
+      if (bar) {
+        bar.classList.add('hidden');
+        bar._crop = null;
+        const wrap = bar.closest('figure').querySelector('.cropWrap');
+        if (wrap) wrap.querySelector('.cropSel').classList.add('hidden');
+      }
+      return;
+    }
+    const del = e.target.closest('button[data-delcrop]');
+    if (del) { removeCrop(Number(del.dataset.delcrop)); return; }
+
     // 该图卡片内的「重新生成」：先把这一张的两个设置都吃进去，再只重绘这一张
     const regen = e.target.closest('button[data-regen]');
     if (regen) {
@@ -23706,6 +23940,70 @@ window.addEventListener('DOMContentLoaded', () => {
       regenImages(null);
     });
   }
+
+  // 2D 图框选：在图上拖拽，松开后给出「生成裁剪卡片」工具条（允许任意矩形）
+  let cropDrag = null;
+  $('#cards').addEventListener('pointerdown', (e) => {
+    const mask = e.target.closest('.cropMask');
+    if (!mask) return;
+    const wrap = mask.parentElement;
+    const k = Number(wrap.dataset.crop);
+    const it = state.items[k];
+    if (!it) return;
+    const p = cropCanvasXY(e, wrap.querySelector('img'));
+    const b = cropBox(it);
+    e.preventDefault();
+    const qx = Math.max(b.L, Math.min(b.R, p.x)), qy = Math.max(b.T, Math.min(b.B, p.y));
+    cropDrag = { k, wrap, b, x0: qx, y0: qy, x1: qx, y1: qy };
+    wrap.querySelector('.cropSel').classList.remove('hidden');
+  });
+  document.addEventListener('pointermove', (e) => {
+    if (!cropDrag) return;
+    const d = cropDrag;
+    const p = cropCanvasXY(e, d.wrap.querySelector('img'));
+    d.x1 = Math.max(d.b.L, Math.min(d.b.R, p.x));
+    d.y1 = Math.max(d.b.T, Math.min(d.b.B, p.y));
+    const sel = d.wrap.querySelector('.cropSel');
+    sel.style.left = (Math.min(d.x0, d.x1) / CROP_CANVAS.W * 100) + '%';
+    sel.style.top = (Math.min(d.y0, d.y1) / CROP_CANVAS.H * 100) + '%';
+    sel.style.width = (Math.abs(d.x1 - d.x0) / CROP_CANVAS.W * 100) + '%';
+    sel.style.height = (Math.abs(d.y1 - d.y0) / CROP_CANVAS.H * 100) + '%';
+  });
+  document.addEventListener('pointerup', () => {
+    if (!cropDrag) return;
+    const d = cropDrag;
+    cropDrag = null;
+    const it = state.items[d.k];
+    if (!it) return;
+    const b = d.b;
+    const x0 = Math.max(b.L, Math.min(b.R, Math.min(d.x0, d.x1)));
+    const x1 = Math.max(b.L, Math.min(b.R, Math.max(d.x0, d.x1)));
+    const y0 = Math.max(b.T, Math.min(b.B, Math.min(d.y0, d.y1)));
+    const y1 = Math.max(b.T, Math.min(b.B, Math.max(d.y0, d.y1)));
+    if (x1 - x0 < 6 || y1 - y0 < 6) {
+      d.wrap.querySelector('.cropSel').classList.add('hidden');
+      return;
+    }
+    const rx0 = (x0 - b.L) / b.pw, rx1 = (x1 - b.L) / b.pw;
+    const ry0 = (y0 - b.T) / b.ph, ry1 = (y1 - b.T) / b.ph;
+    const dataX0 = Math.max(0, Math.floor(rx0 * it.nx));
+    const dataX1 = Math.min(it.nx, Math.ceil(rx1 * it.nx));
+    // canvas 顶部对应数据最后一行（zToImage origin=lower）
+    const row0 = Math.max(0, it.ny - Math.ceil(ry1 * it.ny));
+    const row1 = Math.min(it.ny, it.ny - Math.floor(ry0 * it.ny));
+    if (dataX1 - dataX0 < 2 || row1 - row0 < 2) {
+      d.wrap.querySelector('.cropSel').classList.add('hidden');
+      return;
+    }
+    const wUm = extX(it) * (dataX1 - dataX0) / it.nx;
+    const hUm = extY(it) * (row1 - row0) / it.ny;
+    const bar = d.wrap.closest('figure').querySelector('.cropBar');
+    bar._crop = { k: d.k, x0: dataX0, x1: dataX1, y0: row0, y1: row1 };
+    bar.innerHTML = `已选 ${wUm.toFixed(2)} × ${hUm.toFixed(2)} µm（${dataX1 - dataX0}×${row1 - row0} px）` +
+      `<button class="btn tiny" type="button" data-cropapply="${d.k}">生成裁剪卡片</button>` +
+      `<button class="btn ghost tiny" type="button" data-cropcancel="1">取消</button>`;
+    bar.classList.remove('hidden');
+  });
 
   const drop = $('#drop');
   ['dragenter', 'dragover'].forEach((ev) => drop.addEventListener(ev, (e) => {
